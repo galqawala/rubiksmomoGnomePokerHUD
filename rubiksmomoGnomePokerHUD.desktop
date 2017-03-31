@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Terminal=false
+Name=rubiksmomoGnomePokerHUD
+Icon=/home/rubiksmomo/rubiksmomoGnomePokerHUD/icon.jpg
+Exec=/home/rubiksmomo/rubiksmomoGnomePokerHUD/rubiksmomoGnomePokerHUD.js
+Name[en_US]=rubiksmomoGnomePokerHUD

@@ -352,6 +352,7 @@ function playerEliminated(playerName) {
 }
 
 function getPlayerNameFromLine(line) {
+    //Take a hand history line and strip away everything but the player name. This seems to be the only way as Poker Stars player names can include all kinds of special characters and there are no delimiters in the history files.
     var noPlayerName = /(\*\*\* (HOLE CARDS|FLOP|TURN|RIVER|SHOW DOWN|SUMMARY) \*\*\*|PokerStars Hand #\d+: |Table \'|Total pot \d+ | Rake \d+|Board \[([2-9TJQKA][cdhs][ ]?){3,5}\])/
     if ( noPlayerName.test(line) ) {
         return "";

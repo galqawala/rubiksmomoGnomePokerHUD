@@ -12,6 +12,8 @@ const GLib = imports.gi.GLib;
 const Gio  = imports.gi.Gio;
 
 var globalData                  = new Data();
+var hudPath                     = GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/";
+var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory";
 
 function Data() {
     this.hero                       =   "";
@@ -111,7 +113,8 @@ const rubiksmomoGnomePokerHUD = new Lang.Class({
     ,
     _onStartup: function() {
         let cssProvider = new Gtk.CssProvider();
-        cssProvider.load_from_path("/home/rubiksmomo/rubiksmomoGnomePokerHUD/rubiksmomoGnomePokerHUD.css");
+//        cssProvider.load_from_path(GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/rubiksmomoGnomePokerHUD.css");
+        cssProvider.load_from_path(hudPath+"/rubiksmomoGnomePokerHUD.css");
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), cssProvider, 400);
         
         loadData();
@@ -132,7 +135,8 @@ function refreshHud() {
 }
 
 function refreshStats() {
-    let handDirectory           = Gio.File.new_for_path("/home/rubiksmomo/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory");        
+//    let handDirectory           = Gio.File.new_for_path(GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory");
+    let handDirectory           = Gio.File.new_for_path(handHistoryPath);
     let playerHandDirectories   = handDirectory.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
     
     while (true) {
@@ -498,7 +502,8 @@ function loadWindowPosition(window) {
 }
 
 function saveData() {
-    let file = Gio.file_new_for_path("/home/rubiksmomo/rubiksmomoGnomePokerHUD/data");
+//    let file = Gio.file_new_for_path(GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/data");
+    let file = Gio.file_new_for_path(hudPath+"/data");
     if (!file.query_exists(null)) {
         var file_stream = file.create(Gio.FileCreateFlags.NONE,null);
     }
@@ -510,7 +515,8 @@ function saveData() {
 }
 
 function loadData() {
-	let file = Gio.file_new_for_path("/home/rubiksmomo/rubiksmomoGnomePokerHUD/data");
+//	let file = Gio.file_new_for_path(GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/data");
+    let file = Gio.file_new_for_path(hudPath+"/data");
 	if (file.query_exists(null)) {
         let fileContent = file.read(null).read_bytes(1000000,null).get_data()+ "";
         globalData.windowPositions = JSON.parse(fileContent);

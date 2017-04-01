@@ -15,8 +15,8 @@ var globalData                  = new Data();
 //path of the hud directory
 var hudPath                     = GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD";
 //path of the hand history root, that contains a directory for each player name
-//var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory";
-var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
+var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory";
+//var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
 
 function Data() {
     this.hero                       =   "";
@@ -467,7 +467,7 @@ function widgetSetText(widget,text) {
 
 function getStatColor(value, maxValue, lowIsRed) {
     //hue:    worst=0 (red),   best=2/3 (blue)
-    let hue = value / maxValue;
+    let hue = value / maxValue * 2 / 3;
     if (hue > 2/3) {
         hue = 2/3;
     } else if (hue < 0) {
@@ -479,7 +479,40 @@ function getStatColor(value, maxValue, lowIsRed) {
         hue = (2/3)-hue;    //  2/3 <--> 0
     }
     
-    return hslaToRGBA(hue, 1, 0.74, 1);
+/*    rgba = hslaToRGBA(hue, 1, 0.74, 1);
+    print("lowIsRed="+lowIsRed+" value "+value+"/"+maxValue+" = hue "+hue+" = red "+rgba.red+" = green "+rgba.green+" = blue "+rgba.blue);*/
+    return hslaToRGBA(hue, 1, 0.75, 1);
+}
+
+function hslaToRGBA(h, s, l, a){
+    //hue, saturation, lightness, alpha --> red, green, blue, alpha
+    var r, g, b;
+
+    if(s == 0){
+        r = g = b = l; // achromatic
+    }else{
+        var hue2rgb = function hue2rgb(p, q, t){
+            if(t < 0) t += 1;
+            if(t > 1) t -= 1;
+            if(t < 1/6) return p + (q - p) * 6 * t;
+            if(t < 1/2) return q;
+            if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        }
+
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+    }
+
+    return new Gdk.RGBA({
+        red:    r
+    ,   green:  g
+    ,   blue:   b
+    ,   alpha:  a
+    });
 }
 
 function getWindowByPositionInRelationToHero(positionInRelationToHero) {
@@ -554,35 +587,4 @@ function loadData() {
         let fileContent = file.read(null).read_bytes(1000000,null).get_data()+ "";
         globalData.windowPositions = JSON.parse(fileContent);
     }
-}
-
-function hslaToRGBA(h, s, l, a){
-    //hue, saturation, lightness, alpha --> red, green, blue, alpha
-    var r, g, b;
-
-    if(s == 0){
-        r = g = b = l; // achromatic
-    }else{
-        var hue2rgb = function hue2rgb(p, q, t){
-            if(t < 0) t += 1;
-            if(t > 1) t -= 1;
-            if(t < 1/6) return p + (q - p) * 6 * t;
-            if(t < 1/2) return q;
-            if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-            return p;
-        }
-
-        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        var p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1/3);
-    }
-
-    return new Gdk.RGBA({
-        red:    r
-    ,   green:  g
-    ,   blue:   b
-    ,   alpha:  a
-    });
 }

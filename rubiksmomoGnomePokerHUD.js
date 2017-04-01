@@ -433,12 +433,12 @@ function drawPlayerWindows() {
                     subWidget.set_tooltip_text("Total number of hands dealt to the player.");
                 } else if (subWidgetNo == 3) {  //vpip
                     var value = globalData.players[playerName].getVpipPercent();
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " VP "+Math.round(value)));
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
                 } else if (subWidgetNo == 4) {  //pfr
                     var value = globalData.players[playerName].getPfrPercent();
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " PR "+Math.round(value)));
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
                 } else if (subWidgetNo == 5) {  //ats

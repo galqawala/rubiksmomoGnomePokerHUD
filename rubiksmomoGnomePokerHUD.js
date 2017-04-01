@@ -12,7 +12,9 @@ const GLib = imports.gi.GLib;
 const Gio  = imports.gi.Gio;
 
 var globalData                  = new Data();
-var hudPath                     = GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/";
+//path of the hud directory
+var hudPath                     = GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD";
+//path of the hand history root, that contains a directory for each player name
 var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory";
 
 function Data() {

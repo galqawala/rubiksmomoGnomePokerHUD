@@ -191,8 +191,8 @@ function refreshPlayerData(playerName) {
     globalData.players[playerName].pfrHands             = 0;
     globalData.players[playerName].atsOpportunityHands  = 0;
     globalData.players[playerName].atsHands             = 0;
-    globalData.players[playerName].bbFacingSteal        = 0;
-    globalData.players[playerName].bbFoldVsSteal        = 0;
+    globalData.players[playerName].bbFacingStealHands   = 0;
+    globalData.players[playerName].bbFoldVsStealHands   = 0;
     
     //include current table size in filtering
     let playersOnTableNow = globalData.playersByHand[globalData.latestHandNumber].length;
@@ -422,28 +422,34 @@ function drawPlayerWindows() {
                     widgetSetText(subWidget,globalData.players[playerName].filter.getText());                        
                     subWidget.set_tooltip_text(globalData.players[playerName].filter.getTooltip());
                 } else if (subWidgetNo == 1) {  //stack size in big blinds
-                    widgetSetText(subWidget," "+Math.round(globalData.players[playerName].getStackSizeInBigBlinds())+" BB ");
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getStackSizeInBigBlinds(), 200, false));
+                    var value = globalData.players[playerName].getStackSizeInBigBlinds();
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)+" BB "));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
                     subWidget.set_tooltip_text("Stack size in big blinds (from the beginning of last hand).");
                 } else if (subWidgetNo == 2) {  //totalHands
-                    widgetSetText(subWidget,"("+globalData.players[playerName].totalHands+")");
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].totalHands, 500, true));
+                    var value = globalData.players[playerName].totalHands;
+                    widgetSetText(subWidget,(isNaN(value) ? "" : "("+Math.round(value)+")"));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 500, true));
                     subWidget.set_tooltip_text("Total number of hands dealt to the player.");
                 } else if (subWidgetNo == 3) {  //vpip
-                    widgetSetText(subWidget," VP "+Math.round(globalData.players[playerName].getVpipPercent()));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getVpipPercent(), 100, true));
+                    var value = globalData.players[playerName].getVpipPercent();
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " VP "+Math.round(value)));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
                 } else if (subWidgetNo == 4) {  //pfr
-                    widgetSetText(subWidget," PFR "+Math.round(globalData.players[playerName].getPfrPercent()));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getPfrPercent(), 100, true));
+                    var value = globalData.players[playerName].getPfrPercent();
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " PR "+Math.round(value)));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
                 } else if (subWidgetNo == 5) {  //ats
-                    widgetSetText(subWidget," ATS "+Math.round(globalData.players[playerName].getAtsPercent()));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getAtsPercent(), 100, true));
+                    var value = globalData.players[playerName].getAtsPercent();
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " ATS "+Math.round(value)));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
                 } else if (subWidgetNo == 6) {  //BB fold vs. steal
-                    widgetSetText(subWidget," BBFS "+Math.round(globalData.players[playerName].getBBFoldVsStealPercent()));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getBBFoldVsStealPercent(), 100, true));
+                    var value = globalData.players[playerName].getBBFoldVsStealPercent();
+                    widgetSetText(subWidget,(isNaN(value) ? "" : " BBFS "+Math.round(value)));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("BB fold vs. steal. The percentage of the hands the player folds when facing a preflop steal.");
                 }
             }

@@ -15,7 +15,8 @@ var globalData                  = new Data();
 //path of the hud directory
 var hudPath                     = GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD";
 //path of the hand history root, that contains a directory for each player name
-var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory";
+//var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory";
+var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
 
 function Data() {
     this.hero                       =   "";
@@ -31,6 +32,7 @@ function Data() {
     this.playersLeftToAct           =   0;
     this.maxPlayers                 =   0;
     this.windowPositions            =   [];
+    this.facingSteal                =   0;
 }
 
 function windowPosition(maxPlayers,positionInRelationToHero,x,y) {
@@ -64,6 +66,11 @@ function PlayerData(playerName) {
     this.getAtsPercent              =   function() {
         return (this.atsHands / this.atsOpportunityHands * 100);
     };
+    this.bbFacingStealHands         =   0;
+    this.bbFoldVsStealHands         =   0;
+    this.getBBFoldVsStealPercent    =   function() {
+        return (this.bbFoldVsStealHands / this.bbFacingStealHands * 100);
+    };
 }
 
 function PlayerHand(realMoney) {
@@ -72,6 +79,8 @@ function PlayerHand(realMoney) {
     this.pfr                        =   0;
     this.atsOpportunity             =   0;
     this.ats                        =   0;
+    this.bbFacingSteal              =   0;
+    this.bbFoldVsSteal              =   0;
 }
 
 function Filter() {
@@ -182,6 +191,8 @@ function refreshPlayerData(playerName) {
     globalData.players[playerName].pfrHands             = 0;
     globalData.players[playerName].atsOpportunityHands  = 0;
     globalData.players[playerName].atsHands             = 0;
+    globalData.players[playerName].bbFacingSteal        = 0;
+    globalData.players[playerName].bbFoldVsSteal        = 0;
     
     //include current table size in filtering
     let playersOnTableNow = globalData.playersByHand[globalData.latestHandNumber].length;
@@ -204,6 +215,8 @@ function refreshPlayerData(playerName) {
             globalData.players[playerName].pfrHands             += globalData.players[playerName].hands[parseInt(handNumber)].pfr;
             globalData.players[playerName].atsOpportunityHands  += globalData.players[playerName].hands[parseInt(handNumber)].atsOpportunity;
             globalData.players[playerName].atsHands             += globalData.players[playerName].hands[parseInt(handNumber)].ats;
+            globalData.players[playerName].bbFacingStealHands   += globalData.players[playerName].hands[parseInt(handNumber)].bbFacingSteal;
+            globalData.players[playerName].bbFoldVsStealHands   += globalData.players[playerName].hands[parseInt(handNumber)].bbFoldVsSteal;
         }
     }
     
@@ -259,6 +272,7 @@ function getStatsFromHistoryLines(lines, heroName) {
                     globalData.atsOpportunity = false;                
                 }
                 globalData.playersLeftToAct = globalData.playersByHand[parseInt(handNumber)].length;
+                globalData.facingSteal      = 0;
             } else if (/^Table /.test(lines[lineNumber]) && section == "PokerStars Hand") {
                 if (/ \(Play Money\) /.test(lines[lineNumber])) {
                     realMoney = false;
@@ -294,8 +308,8 @@ function processPreflopAction(line, handNumber, playerName, section) {
         //steal opportunity
         globalData.players[playerName].hands[parseInt(handNumber)].atsOpportunity = 1;
     }
-    //preflop action
-    if ( section=="HOLE CARDS" && /[:] (calls|raises) /.test(line)) {
+//    if ( section=="HOLE CARDS" && /[:] (calls|raises) /.test(line)) {
+    if (/[:] (calls|raises) /.test(line)) {
         //preflop call/raise --> VPIP
         globalData.players[playerName].hands[parseInt(handNumber)].vpip = 1;
         if (/[:] raises /.test(line)) {
@@ -304,9 +318,16 @@ function processPreflopAction(line, handNumber, playerName, section) {
             if (globalData.atsOpportunity && globalData.playersLeftToAct <= 4 && globalData.playersLeftToAct > 1) {
                 //steal
                 globalData.players[playerName].hands[parseInt(handNumber)].ats = 1;
+                globalData.facingSteal  = 1;
             }
         }                
         globalData.atsOpportunity = false;
+    }
+    if (globalData.facingSteal == 1 && globalData.playersLeftToAct == 1) {
+        globalData.players[playerName].hands[parseInt(handNumber)].bbFacingSteal = 1;
+        if (/[:] (folds) /.test(line)) {
+            globalData.players[playerName].hands[parseInt(handNumber)].bbFoldVsSteal = 1;        
+        }
     }
     globalData.playersLeftToAct -= 1;
 }
@@ -387,7 +408,7 @@ function drawPlayerWindows() {
         for (var widgetNo in playerWindow.get_children()) {
             let widget = playerWindow.get_children()[widgetNo];
             
-            while (widget.get_children().length < 6) {
+            while (widget.get_children().length < 7) {
                 let textView = new Gtk.TextView();
                 textView.set_editable(false);
                 textView.set_cursor_visible(false);
@@ -420,6 +441,10 @@ function drawPlayerWindows() {
                     widgetSetText(subWidget," ATS "+Math.round(globalData.players[playerName].getAtsPercent()));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getAtsPercent(), 100, true));
                     subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
+                } else if (subWidgetNo == 6) {  //BB fold vs. steal
+                    widgetSetText(subWidget," BBFS "+Math.round(globalData.players[playerName].getBBFoldVsStealPercent()));
+                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(globalData.players[playerName].getBBFoldVsStealPercent(), 100, true));
+                    subWidget.set_tooltip_text("BB fold vs. steal. The percentage of the hands the player folds when facing a preflop steal.");
                 }
             }
         }

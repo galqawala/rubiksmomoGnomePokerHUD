@@ -19,20 +19,21 @@ var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual dr
 //var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
 
 function Data() {
-    this.hero                       =   "";
-    this.latestHandNumber           =   0;
-    this.processedUntilHandNumber   =   0;
-    this.seatsPickedFromHand        =   0;
-    this.heroSeat                   =   0;
-    this.bigBlind                   =   0;
-    this.players                    =   [];
-    this.realMoney                  =   true;
-    this.playersByHand              =   [];
-    this.atsOpportunity             =   true;
-    this.playersLeftToAct           =   0;
-    this.maxPlayers                 =   0;
-    this.windowPositions            =   [];
-    this.facingSteal                =   0;
+    this.hero                           =   "";
+    this.latestHandNumber               =   0;
+    this.processedUntilHandNumber       =   0;
+    this.seatsPickedFromHand            =   0;
+    this.heroSeat                       =   0;
+    this.bigBlind                       =   0;
+    this.players                        =   [];
+    this.realMoneyHandBeingProcessed    =   true;
+    this.realMoneyLatestHand            =   true;
+    this.playersByHand                  =   [];
+    this.atsOpportunity                 =   true;
+    this.playersLeftToAct               =   0;
+    this.maxPlayers                     =   0;
+    this.windowPositions                =   [];
+    this.facingSteal                    =   0;
 }
 
 function windowPosition(maxPlayers,positionInRelationToHero,x,y) {
@@ -48,44 +49,20 @@ function PlayerData(playerName) {
     this.stackSizeInChips           =   0;
     this.filter                     =   new Filter();
     this.stats                      =   new Stats(null,0);
-    /*
-    this.getStackSizeInBigBlinds    =   function() {
-        //stack size is read before big blind is posted
-        return this.stackSizeInChips / globalData.bigBlind;
-    };
-/*    this.hands                      =   [];
-    this.totalHands                 =   0;
-    this.vpip                  =   0;
-    this.getVpipPercent             =   function() {
-        return (this.vpip / this.totalHands * 100);
-    };
-/*    this.pfr                   =   0;
-    this.getPfrPercent              =   function() {
-        return (this.pfr / this.totalHands * 100);
-    };
-/*    this.atsOpportunity        =   0;
-    this.ats                   =   0;
-    this.getAtsPercent              =   function() {
-        return (this.ats / this.atsOpportunity * 100);
-    };
-/*    this.bbFacingSteal         =   0;
-    this.bbFoldVsSteal         =   0;
-    this.getBBFoldVsStealPercent    =   function() {
-        return (this.bbFoldVsSteal / this.bbFacingSteal * 100);
-    };
-    */
 }
 
-function Stats(realMoney,hands) {
+function Stats(hands) {
     //Used to store stats about single hand and totals of multiple hands. Each stat/property indicates number of such hands, unless otherwise commented.
     this.hands                      =   hands;
-    this.realMoney                  =   realMoney; //boolean
+    this.realMoney                  =   globalData.realMoneyHandBeingProcessed; //boolean
     this.vpip                       =   0;
     this.pfr                        =   0;
     this.atsOpportunity             =   0;
     this.ats                        =   0;
     this.bbFacingSteal              =   0;
     this.bbFoldVsSteal              =   0;
+    this.wentToFlop                 =   0;
+    this.postflopShowdown           =   0;
 }
 
 function Filter() {
@@ -129,7 +106,6 @@ const rubiksmomoGnomePokerHUD = new Lang.Class({
     ,
     _onStartup: function() {
         let cssProvider = new Gtk.CssProvider();
-//        cssProvider.load_from_path(GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/rubiksmomoGnomePokerHUD.css");
         cssProvider.load_from_path(hudPath+"/rubiksmomoGnomePokerHUD.css");
         Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), cssProvider, 400);
         
@@ -151,7 +127,6 @@ function refreshHud() {
 }
 
 function refreshStats() {
-//    let handDirectory           = Gio.File.new_for_path(GLib.get_home_dir()+"/PlayOnLinux's virtual drives/pokerStars2016/drive_c/Program Files/PokerStars.EU/HandHistory");
     let handDirectory           = Gio.File.new_for_path(handHistoryPath);
     let playerHandDirectories   = handDirectory.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
     
@@ -181,24 +156,17 @@ function refreshStats() {
     globalData.processedUntilHandNumber = parseInt(globalData.latestHandNumber);
 }
 
-function addHand(player, handNumber, realMoney) {
+function addHand(player, handNumber) {
     if (globalData.players[player].hands === undefined) {
         globalData.players[player].hands = [];
     }
     if (globalData.players[player].hands[parseInt(handNumber)] === undefined) {
-        globalData.players[player].hands[parseInt(handNumber)] = new Stats(realMoney,1);
+        globalData.players[player].hands[parseInt(handNumber)] = new Stats(1);
     }
 }
 
 function refreshPlayerData(playerName) {
     globalData.players[playerName].stats    =   new Stats(null,0);
-/*    globalData.players[playerName].stats.hands           = 0;
-    globalData.players[playerName].vpip            = 0;
-    globalData.players[playerName].pfr             = 0;
-    globalData.players[playerName].atsOpportunity  = 0;
-    globalData.players[playerName].ats             = 0;
-    globalData.players[playerName].bbFacingSteal   = 0;
-    globalData.players[playerName].bbFoldVsSteal   = 0;*/
     
     //include current table size in filtering
     let playersOnTableNow = globalData.playersByHand[globalData.latestHandNumber].length;
@@ -222,14 +190,6 @@ function refreshPlayerData(playerName) {
             for (var stat in globalData.players[playerName].hands[parseInt(handNumber)]) {
                 globalData.players[playerName].stats[stat] += globalData.players[playerName].hands[parseInt(handNumber)][stat];
             }
-        
-/*            globalData.players[playerName].stats.hands           += 1;
-            globalData.players[playerName].vpip            += globalData.players[playerName].hands[parseInt(handNumber)].vpip;
-            globalData.players[playerName].pfr             += globalData.players[playerName].hands[parseInt(handNumber)].pfr;
-            globalData.players[playerName].atsOpportunity  += globalData.players[playerName].hands[parseInt(handNumber)].atsOpportunity;
-            globalData.players[playerName].ats             += globalData.players[playerName].hands[parseInt(handNumber)].ats;
-            globalData.players[playerName].bbFacingSteal   += globalData.players[playerName].hands[parseInt(handNumber)].bbFacingSteal;
-            globalData.players[playerName].bbFoldVsSteal   += globalData.players[playerName].hands[parseInt(handNumber)].bbFoldVsSteal;*/
         }
     }
     
@@ -237,7 +197,7 @@ function refreshPlayerData(playerName) {
         //many hands, let's filter to get the most relevant hands
         if (globalData.players[playerName].filter.realMoney === null) {
             //filter by real/play money
-            globalData.players[playerName].filter.realMoney =   globalData.realMoney;
+            globalData.players[playerName].filter.realMoney =   globalData.realMoneyLatestHand;
             refreshPlayerData(playerName);
         } else if ( (playersOnTableNow - globalData.players[playerName].filter.playersOnTableMin)
                 >   (globalData.players[playerName].filter.playersOnTableMax - playersOnTableNow) ) {
@@ -253,7 +213,6 @@ function refreshPlayerData(playerName) {
 function getStatsFromHistoryLines(lines, heroName) {
     let handNumber       = 0;
     let section          = "";
-    let realMoney        = true;
 
     for (var lineNumber in lines) {
         let playerName = getPlayerNameFromLine(lines[lineNumber]);
@@ -263,7 +222,8 @@ function getStatsFromHistoryLines(lines, heroName) {
     
         //loop lines in hand history file
         if ( /PokerStars Hand #/.test(lines[lineNumber]) ) {
-            section         = "PokerStars Hand";
+            section                 = "PokerStars Hand";
+            globalData.wentToFlop   = false;
             
             //get hand number (we'll show stats for the players that were present in last hand)
             handNumber = parseInt(lines[lineNumber].split(":")[0].split("#")[1]);
@@ -276,7 +236,7 @@ function getStatsFromHistoryLines(lines, heroName) {
         
         if (parseInt(handNumber) > globalData.processedUntilHandNumber) {
             if ( /^Seat /.test(lines[lineNumber]) && section != "SUMMARY") {
-                processHandSeatLine(lines[lineNumber], handNumber, playerName, realMoney);
+                processHandSeatLine(lines[lineNumber], handNumber, playerName);
             } else if ( /\*\*\* /.test(lines[lineNumber])) {
                 section     = lines[lineNumber].split(/\*\*\*/)[1].trim();
                 if (section=="HOLE CARDS") {
@@ -287,33 +247,43 @@ function getStatsFromHistoryLines(lines, heroName) {
                 globalData.playersLeftToAct = globalData.playersByHand[parseInt(handNumber)].length;
                 globalData.facingSteal      = 0;
             } else if (/^Table /.test(lines[lineNumber]) && section == "PokerStars Hand") {
-                if (/ \(Play Money\) /.test(lines[lineNumber])) {
-                    realMoney = false;
-                } else {
-                    realMoney = true;
-                }
-                
-                if (parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
-                    //table info from latest hand
-                    globalData.realMoney  = realMoney;
-                    if (globalData.maxPlayers != parseInt(lines[lineNumber].match(/' \d+-max /)[0].split(/[ -]/)[1])) {
-                        //table size changed --> save maxPlayers and close existing windows
-                        globalData.maxPlayers = parseInt(lines[lineNumber].match(/' \d+-max /)[0].split(/[ -]/)[1])
-                        for (var windowNo in app.application.get_windows()) {
-                            app.application.get_windows()[windowNo].close();
-                        }
-                    }
-                }                
+                processTableLine(lines[lineNumber], handNumber);
             } else if ( /: posts big blind \d+/.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
                 //save big blind from newest hand
                 globalData.bigBlind    = parseInt( lines[lineNumber].split(/ /).pop().trim() );
-            } else if ( section=="HOLE CARDS" && /[:] (calls|raises|folds) /.test(lines[lineNumber])) {
+            } else if ( section=="HOLE CARDS" && /\: (calls|raises|folds) /.test(lines[lineNumber])) {
                 processPreflopAction(lines[lineNumber], handNumber, playerName, section);
-            } else if (/ finished the tournament in /.test(lines[lineNumber])) {
+            } else if (/ finished the tournament in /.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
                 playerEliminated(playerName);
+            } else if (section == "FLOP" && /\: (checks|calls|bets|raises|folds) /.test(lines[lineNumber])) {
+                //player saw the flop (before show down)
+                globalData.players[playerName].hands[parseInt(handNumber)].wentToFlop = 1;
+            } else if (section == "SHOW DOWN" && /\: (mucks|shows) (hand|\[[2-9TJQKA][cdhs] [2-9TJQKA][cdhs]\])/.test(lines[lineNumber]) && globalData.players[playerName].hands[parseInt(handNumber)].wentToFlop == 1) {
+                //went to showdown post flop
+                globalData.players[playerName].hands[parseInt(handNumber)].postflopShowdown = 1;    
             }
         }
     }
+}
+
+function processTableLine(line,handNumber) {
+    if (/ \(Play Money\) /.test(line)) {
+        globalData.realMoneyHandBeingProcessed = false;
+    } else {
+        globalData.realMoneyHandBeingProcessed = true;
+    }
+    
+    if (parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+        //table info from latest hand
+        globalData.realMoneyLatestHand = globalData.realMoneyHandBeingProcessed;
+        if (globalData.maxPlayers != parseInt(line.match(/' \d+-max /)[0].split(/[ -]/)[1])) {
+            //table size changed --> save maxPlayers and close existing windows
+            globalData.maxPlayers = parseInt(line.match(/' \d+-max /)[0].split(/[ -]/)[1])
+            for (var windowNo in app.application.get_windows()) {
+                app.application.get_windows()[windowNo].close();
+            }
+        }
+    }                
 }
 
 function processPreflopAction(line, handNumber, playerName, section) {
@@ -321,11 +291,10 @@ function processPreflopAction(line, handNumber, playerName, section) {
         //steal opportunity
         globalData.players[playerName].hands[parseInt(handNumber)].atsOpportunity = 1;
     }
-//    if ( section=="HOLE CARDS" && /[:] (calls|raises) /.test(line)) {
-    if (/[:] (calls|raises) /.test(line)) {
+    if (/\: (calls|raises) /.test(line)) {
         //preflop call/raise --> VPIP
         globalData.players[playerName].hands[parseInt(handNumber)].vpip = 1;
-        if (/[:] raises /.test(line)) {
+        if (/\: raises /.test(line)) {
             //preflop raise --> PFR
             globalData.players[playerName].hands[parseInt(handNumber)].pfr = 1;
             if (globalData.atsOpportunity && globalData.playersLeftToAct <= 4 && globalData.playersLeftToAct > 1) {
@@ -338,14 +307,14 @@ function processPreflopAction(line, handNumber, playerName, section) {
     }
     if (globalData.facingSteal == 1 && globalData.playersLeftToAct == 1) {
         globalData.players[playerName].hands[parseInt(handNumber)].bbFacingSteal = 1;
-        if (/[:] (folds) /.test(line)) {
+        if (/\: (folds) /.test(line)) {
             globalData.players[playerName].hands[parseInt(handNumber)].bbFoldVsSteal = 1;        
         }
     }
     globalData.playersLeftToAct -= 1;
 }
 
-function processHandSeatLine(line, handNumber, playerName, realMoney) {
+function processHandSeatLine(line, handNumber, playerName) {
     //save players by hand
     if (globalData.playersByHand[parseInt(handNumber)] === undefined) {
         globalData.playersByHand[parseInt(handNumber)] = [playerName];
@@ -354,7 +323,7 @@ function processHandSeatLine(line, handNumber, playerName, realMoney) {
     }
 
     let seat    = line.split(/[ :]/)[1].trim();
-    addHand(playerName, parseInt(handNumber), realMoney);
+    addHand(playerName, parseInt(handNumber));
     //save seats
     if (parseInt(globalData.seatsPickedFromHand) < parseInt(handNumber)) {
         //seats are from an older hand, forget about them
@@ -366,7 +335,7 @@ function processHandSeatLine(line, handNumber, playerName, realMoney) {
         
         //save players for each seat
         globalData.playerBySeat[parseInt(seat)] = playerName;
-        if (playerName == globalData.hero) { 
+        if (playerName == globalData.hero) {
             globalData.heroSeat = parseInt(seat);
         }
         //save stack sizes in big blinds
@@ -417,11 +386,11 @@ function drawPlayerWindows() {
         let playerWindow = getWindowByPositionInRelationToHero(parseInt(positionInRelationToHero));
         playerWindow.set_keep_above(true);
         playerWindow.set_type_hint(Gdk.WindowTypeHint.DIALOG);
-        playerWindow.set_title(parseInt(positionInRelationToHero)+": "+playerName);
+        playerWindow.set_title(positionInRelationToHero+": "+playerName);
         for (var widgetNo in playerWindow.get_children()) {
             let widget = playerWindow.get_children()[widgetNo];
             
-            while (widget.get_children().length < 7) {
+            while (widget.get_children().length < 8) {
                 let textView = new Gtk.TextView();
                 textView.set_editable(false);
                 textView.set_cursor_visible(false);
@@ -429,52 +398,53 @@ function drawPlayerWindows() {
             }
             
             for (var subWidgetNo in widget.get_children()) {
-                let subWidget = widget.get_children()[subWidgetNo];
-                
-                if (subWidgetNo == 0) {         //filter
-                    widgetSetText(subWidget,globalData.players[playerName].filter.getText());                        
-                    subWidget.set_tooltip_text(globalData.players[playerName].filter.getTooltip());
-                } else if (subWidgetNo == 1) {  //stack size in big blinds
-//                    var value = globalData.players[playerName].getStackSizeInBigBlinds();
-                    var value = globalData.players[playerName].stackSizeInChips / globalData.bigBlind;
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)+" BB "));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
-                    subWidget.set_tooltip_text("Stack size in big blinds (from the beginning of last hand).");
-                } else if (subWidgetNo == 2) {  //totalHands
-//                    var value = globalData.players[playerName].stats.hands;
-                    var value = globalData.players[playerName].stats.hands;
-                    widgetSetText(subWidget,(isNaN(value) ? "" : "("+Math.round(value)+")"));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 500, true));
-                    subWidget.set_tooltip_text("Total number of hands dealt to the player.");
-                } else if (subWidgetNo == 3) {  //vpip
-//                    var value = globalData.players[playerName].getVpipPercent();
-                    var value = globalData.players[playerName].stats.vpip / globalData.players[playerName].stats.hands * 100;
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-                    subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
-                } else if (subWidgetNo == 4) {  //pfr
-//                    var value = globalData.players[playerName].getPfrPercent();
-                    var value =  globalData.players[playerName].stats.pfr /  globalData.players[playerName].stats.hands * 100;
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-                    subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
-                } else if (subWidgetNo == 5) {  //ats
-//                    var value = globalData.players[playerName].getAtsPercent();
-                    var value =  globalData.players[playerName].stats.ats /  globalData.players[playerName].stats.atsOpportunity * 100;
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " ATS "+Math.round(value)));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-                    subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
-                } else if (subWidgetNo == 6) {  //BB fold vs. steal
-//                    var value = globalData.players[playerName].getBBFoldVsStealPercent();
-                    var value =  globalData.players[playerName].stats.bbFoldVsSteal /  globalData.players[playerName].stats.bbFacingSteal * 100;
-                    widgetSetText(subWidget,(isNaN(value) ? "" : " BBFS "+Math.round(value)));
-                    subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-                    subWidget.set_tooltip_text("BB fold vs. steal. The percentage of the hands the player folds when facing a preflop steal.");
-                }
+                updateStatTextView(widget.get_children()[subWidgetNo], subWidgetNo, playerName);
             }
         }
 
         playerWindow.show_all();
+    }
+}
+
+function updateStatTextView(subWidget, subWidgetNo, playerName) {
+    if (subWidgetNo == 0) {         //filter
+        widgetSetText(subWidget,globalData.players[playerName].filter.getText());                        
+        subWidget.set_tooltip_text(globalData.players[playerName].filter.getTooltip());
+    } else if (subWidgetNo == 1) {  //stack size in big blinds
+        var value = globalData.players[playerName].stackSizeInChips / globalData.bigBlind;
+        widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)+" BB "));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
+        subWidget.set_tooltip_text("Stack size in big blinds (from the beginning of last hand).");
+    } else if (subWidgetNo == 2) {  //totalHands
+        var value = globalData.players[playerName].stats.hands;
+        widgetSetText(subWidget,(isNaN(value) ? "" : "("+Math.round(value)+")"));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 500, true));
+        subWidget.set_tooltip_text("Total number of hands dealt to the player.");
+    } else if (subWidgetNo == 3) {  //vpip
+        var value = globalData.players[playerName].stats.vpip / globalData.players[playerName].stats.hands * 100;
+        widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
+        subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
+    } else if (subWidgetNo == 4) {  //pfr
+        var value =  globalData.players[playerName].stats.pfr /  globalData.players[playerName].stats.hands * 100;
+        widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
+        subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
+    } else if (subWidgetNo == 5) {  //ats
+        var value =  globalData.players[playerName].stats.ats /  globalData.players[playerName].stats.atsOpportunity * 100;
+        widgetSetText(subWidget,(isNaN(value) ? "" : " ATS "+Math.round(value)));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
+        subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
+    } else if (subWidgetNo == 6) {  //BB fold vs. steal
+        var value =  globalData.players[playerName].stats.bbFoldVsSteal /  globalData.players[playerName].stats.bbFacingSteal * 100;
+        widgetSetText(subWidget,(isNaN(value) ? "" : " BBFS "+Math.round(value)));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
+        subWidget.set_tooltip_text("BB fold vs. steal. The percentage of the hands the player folds when facing a preflop steal.");
+    } else if (subWidgetNo == 7) {  //WTSD
+        var value =  globalData.players[playerName].stats.postflopShowdown / globalData.players[playerName].stats.wentToFlop * 100;
+        widgetSetText(subWidget,(isNaN(value) ? "" : " WTSD "+Math.round(value)));
+        subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
+        subWidget.set_tooltip_text("The percentage of the hands that went to show down, out of the ones that saw the flop.");
     }
 }
 
@@ -498,8 +468,6 @@ function getStatColor(value, maxValue, lowIsRed) {
         hue = (2/3)-hue;    //  2/3 <--> 0
     }
     
-/*    rgba = hslaToRGBA(hue, 1, 0.74, 1);
-    print("lowIsRed="+lowIsRed+" value "+value+"/"+maxValue+" = hue "+hue+" = red "+rgba.red+" = green "+rgba.green+" = blue "+rgba.blue);*/
     return hslaToRGBA(hue, 1, 0.75, 1);
 }
 
@@ -587,7 +555,6 @@ function loadWindowPosition(window) {
 }
 
 function saveData() {
-//    let file = Gio.file_new_for_path(GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/data");
     let file = Gio.file_new_for_path(hudPath+"/data");
     if (!file.query_exists(null)) {
         var file_stream = file.create(Gio.FileCreateFlags.NONE,null);
@@ -600,7 +567,6 @@ function saveData() {
 }
 
 function loadData() {
-//	let file = Gio.file_new_for_path(GLib.get_home_dir()+"/rubiksmomoGnomePokerHUD/data");
     let file = Gio.file_new_for_path(hudPath+"/data");
 	if (file.query_exists(null)) {
         let fileContent = file.read(null).read_bytes(1000000,null).get_data()+ "";

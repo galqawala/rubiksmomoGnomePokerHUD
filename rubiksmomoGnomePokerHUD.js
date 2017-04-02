@@ -26,7 +26,6 @@ function Data() {
     this.heroSeat                       =   0;
     this.bigBlind                       =   0;
     this.players                        =   [];
-    this.realMoneyHandBeingProcessed    =   true;
     this.realMoneyLatestHand            =   true;
     this.playersByHand                  =   [];
     this.atsOpportunity                 =   true;
@@ -48,13 +47,13 @@ function PlayerData(playerName) {
     this.seat                       =   0;
     this.stackSizeInChips           =   0;
     this.filter                     =   new Filter();
-    this.stats                      =   new Stats(null,0);
+    this.stats                      =   [];
 }
 
-function Stats(hands) {
+function Stats(hands,realMoney) {
     //Used to store stats about single hand and totals of multiple hands. Each stat/property indicates number of such hands, unless otherwise commented.
     this.hands                      =   hands;
-    this.realMoney                  =   globalData.realMoneyHandBeingProcessed; //boolean
+    this.realMoney                  =   realMoney; //boolean (only for single hand)
     this.vpip                       =   0;
     this.pfr                        =   0;
     this.atsOpportunity             =   0;
@@ -127,6 +126,7 @@ function refreshHud() {
 }
 
 function refreshStats() {
+    print("========== refreshing ==========");
     let handDirectory           = Gio.File.new_for_path(handHistoryPath);
     let playerHandDirectories   = handDirectory.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
     
@@ -144,11 +144,11 @@ function refreshStats() {
             let file = playerHandFiles.get_child(fileInfo);
 
             if (!fileInfo.get_name().endsWith("~")) {
-                print("========== reading file: "+fileInfo.get_name()+" ==========");
+                print("===== read file: "+fileInfo.get_name()+" =====");
                 //Process files without ~ filename suffix
                 let fileContent = file.read(null).read_bytes(1000000,null).get_data() + "";
                 let lines = fileContent.split("\n");
-                getStatsFromHistoryLines(lines, playerHandDirectoryInfo.get_name());
+                getStatsFromHistoryLines(lines, playerHandDirectoryInfo.get_name(), !( / Play Money /.test(fileInfo.get_name()) ) );
             }
         }
     }
@@ -156,61 +156,7 @@ function refreshStats() {
     globalData.processedUntilHandNumber = parseInt(globalData.latestHandNumber);
 }
 
-function addHand(player, handNumber) {
-    if (globalData.players[player].hands === undefined) {
-        globalData.players[player].hands = [];
-    }
-    if (globalData.players[player].hands[parseInt(handNumber)] === undefined) {
-        globalData.players[player].hands[parseInt(handNumber)] = new Stats(1);
-    }
-}
-
-function refreshPlayerData(playerName) {
-    globalData.players[playerName].stats    =   new Stats(null,0);
-    
-    //include current table size in filtering
-    let playersOnTableNow = globalData.playersByHand[globalData.latestHandNumber].length;
-    if (globalData.players[playerName].filter.playersOnTableMin > playersOnTableNow) {
-        globalData.players[playerName].filter.playersOnTableMin = playersOnTableNow;
-    }
-    if (globalData.players[playerName].filter.playersOnTableMax < playersOnTableNow) {
-        globalData.players[playerName].filter.playersOnTableMax = playersOnTableNow;
-    }
-    
-    //sum the stats
-    for (var handNumber in globalData.players[playerName].hands) {
-        let playersOnHand = globalData.playersByHand[handNumber].length;
-        if (    //passes filters
-                (globalData.players[playerName].filter.realMoney === null || globalData.players[playerName].filter.realMoney === globalData.players[playerName].hands[parseInt(handNumber)].realMoney)
-            &&  (playersOnHand >= globalData.players[playerName].filter.playersOnTableMin)
-            &&  (playersOnHand <= globalData.players[playerName].filter.playersOnTableMax)
-        ) {
-                    
-            //sum each property from each hand into the player's sums
-            for (var stat in globalData.players[playerName].hands[parseInt(handNumber)]) {
-                globalData.players[playerName].stats[stat] += globalData.players[playerName].hands[parseInt(handNumber)][stat];
-            }
-        }
-    }
-    
-    if (globalData.players[playerName].stats.hands > 500) {
-        //many hands, let's filter to get the most relevant hands
-        if (globalData.players[playerName].filter.realMoney === null) {
-            //filter by real/play money
-            globalData.players[playerName].filter.realMoney =   globalData.realMoneyLatestHand;
-            refreshPlayerData(playerName);
-        } else if ( (playersOnTableNow - globalData.players[playerName].filter.playersOnTableMin)
-                >   (globalData.players[playerName].filter.playersOnTableMax - playersOnTableNow) ) {
-            globalData.players[playerName].filter.playersOnTableMin += 1;
-            refreshPlayerData(playerName);
-        } else if (    (globalData.players[playerName].filter.playersOnTableMax > playersOnTableNow) ) {
-            globalData.players[playerName].filter.playersOnTableMax -= 1;
-            refreshPlayerData(playerName);
-        }
-    }
-}
-
-function getStatsFromHistoryLines(lines, heroName) {
+function getStatsFromHistoryLines(lines, heroName, realMoney) {
     let handNumber       = 0;
     let section          = "";
 
@@ -236,7 +182,7 @@ function getStatsFromHistoryLines(lines, heroName) {
         
         if (parseInt(handNumber) > globalData.processedUntilHandNumber) {
             if ( /^Seat /.test(lines[lineNumber]) && section != "SUMMARY") {
-                processHandSeatLine(lines[lineNumber], handNumber, playerName);
+                processHandSeatLine(lines[lineNumber], handNumber, playerName, realMoney);
             } else if ( /\*\*\* /.test(lines[lineNumber])) {
                 section     = lines[lineNumber].split(/\*\*\*/)[1].trim();
                 if (section=="HOLE CARDS") {
@@ -247,7 +193,7 @@ function getStatsFromHistoryLines(lines, heroName) {
                 globalData.playersLeftToAct = globalData.playersByHand[parseInt(handNumber)].length;
                 globalData.facingSteal      = 0;
             } else if (/^Table /.test(lines[lineNumber]) && section == "PokerStars Hand") {
-                processTableLine(lines[lineNumber], handNumber);
+                processTableLine(lines[lineNumber], handNumber, realMoney);
             } else if ( /: posts big blind \d+/.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
                 //save big blind from newest hand
                 globalData.bigBlind    = parseInt( lines[lineNumber].split(/ /).pop().trim() );
@@ -266,16 +212,10 @@ function getStatsFromHistoryLines(lines, heroName) {
     }
 }
 
-function processTableLine(line,handNumber) {
-    if (/ \(Play Money\) /.test(line)) {
-        globalData.realMoneyHandBeingProcessed = false;
-    } else {
-        globalData.realMoneyHandBeingProcessed = true;
-    }
-    
+function processTableLine(line, handNumber, realMoney) {
     if (parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
         //table info from latest hand
-        globalData.realMoneyLatestHand = globalData.realMoneyHandBeingProcessed;
+        globalData.realMoneyLatestHand = realMoney;
         if (globalData.maxPlayers != parseInt(line.match(/' \d+-max /)[0].split(/[ -]/)[1])) {
             //table size changed --> save maxPlayers and close existing windows
             globalData.maxPlayers = parseInt(line.match(/' \d+-max /)[0].split(/[ -]/)[1])
@@ -314,7 +254,7 @@ function processPreflopAction(line, handNumber, playerName, section) {
     globalData.playersLeftToAct -= 1;
 }
 
-function processHandSeatLine(line, handNumber, playerName) {
+function processHandSeatLine(line, handNumber, playerName, realMoney) {
     //save players by hand
     if (globalData.playersByHand[parseInt(handNumber)] === undefined) {
         globalData.playersByHand[parseInt(handNumber)] = [playerName];
@@ -323,7 +263,7 @@ function processHandSeatLine(line, handNumber, playerName) {
     }
 
     let seat    = line.split(/[ :]/)[1].trim();
-    addHand(playerName, parseInt(handNumber));
+    addHand(playerName, parseInt(handNumber), realMoney);
     //save seats
     if (parseInt(globalData.seatsPickedFromHand) < parseInt(handNumber)) {
         //seats are from an older hand, forget about them
@@ -573,3 +513,61 @@ function loadData() {
         globalData.windowPositions = JSON.parse(fileContent);
     }
 }
+
+function addHand(player, handNumber, realMoney) {
+    if (globalData.players[player].hands === undefined) {
+        globalData.players[player].hands = [];
+    }
+    if (globalData.players[player].hands[parseInt(handNumber)] === undefined) {
+        globalData.players[player].hands[parseInt(handNumber)] = new Stats(1, realMoney);
+    }
+}
+
+function refreshPlayerData(playerName) {
+    globalData.players[playerName].stats    =   new Stats(0,null);
+    
+    //Update filters to make sure latest hands are included. Usually required when a player gets eliminated. It's also possible we first played "play money" 6-max and then moved into "real money" 9-max. 
+    let playersOnTableNow = globalData.playersByHand[globalData.latestHandNumber].length;
+    if (globalData.players[playerName].filter.playersOnTableMin > playersOnTableNow) {
+        globalData.players[playerName].filter.playersOnTableMin = playersOnTableNow;
+    }
+    if (globalData.players[playerName].filter.playersOnTableMax < playersOnTableNow) {
+        globalData.players[playerName].filter.playersOnTableMax = playersOnTableNow;
+    }
+    if (globalData.players[playerName].filter.realMoney !== null) {
+        globalData.players[playerName].filter.realMoney = globalData.realMoneyLatestHand;
+    }
+    
+    //sum the stats
+    for (var handNumber in globalData.players[playerName].hands) {
+        let playersOnHand = globalData.playersByHand[handNumber].length;
+        if (    //passes filters
+                (globalData.players[playerName].filter.realMoney === null || globalData.players[playerName].filter.realMoney === globalData.players[playerName].hands[parseInt(handNumber)].realMoney)
+            &&  (playersOnHand >= globalData.players[playerName].filter.playersOnTableMin)
+            &&  (playersOnHand <= globalData.players[playerName].filter.playersOnTableMax)
+        ) {
+                    
+            //sum each property from each hand into the player's sums
+            for (var stat in globalData.players[playerName].hands[parseInt(handNumber)]) {
+                globalData.players[playerName].stats[stat] += globalData.players[playerName].hands[parseInt(handNumber)][stat];
+            }
+        }
+    }
+    
+    if (globalData.players[playerName].stats.hands > 500) {
+        //many hands, let's filter to get the most relevant hands
+        if (globalData.players[playerName].filter.realMoney === null) {
+            //filter by real/play money
+            globalData.players[playerName].filter.realMoney =   globalData.realMoneyLatestHand;
+            refreshPlayerData(playerName);
+        } else if ( (playersOnTableNow - globalData.players[playerName].filter.playersOnTableMin)
+                >   (globalData.players[playerName].filter.playersOnTableMax - playersOnTableNow) ) {
+            globalData.players[playerName].filter.playersOnTableMin += 1;
+            refreshPlayerData(playerName);
+        } else if (    (globalData.players[playerName].filter.playersOnTableMax > playersOnTableNow) ) {
+            globalData.players[playerName].filter.playersOnTableMax -= 1;
+            refreshPlayerData(playerName);
+        }
+    }
+}
+

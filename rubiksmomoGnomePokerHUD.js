@@ -44,37 +44,42 @@ function windowPosition(maxPlayers,positionInRelationToHero,x,y) {
 
 function PlayerData(playerName) {
     this.playerName                 =   playerName;
-    this.filter                     =   new Filter();
     this.seat                       =   0;
     this.stackSizeInChips           =   0;
+    this.filter                     =   new Filter();
+    this.stats                      =   new Stats(null,0);
+    /*
     this.getStackSizeInBigBlinds    =   function() {
         //stack size is read before big blind is posted
         return this.stackSizeInChips / globalData.bigBlind;
     };
-    this.hands                      =   [];
+/*    this.hands                      =   [];
     this.totalHands                 =   0;
-    this.vpipHands                  =   0;
+    this.vpip                  =   0;
     this.getVpipPercent             =   function() {
-        return (this.vpipHands / this.totalHands * 100);
+        return (this.vpip / this.totalHands * 100);
     };
-    this.pfrHands                   =   0;
+/*    this.pfr                   =   0;
     this.getPfrPercent              =   function() {
-        return (this.pfrHands / this.totalHands * 100);
+        return (this.pfr / this.totalHands * 100);
     };
-    this.atsOpportunityHands        =   0;
-    this.atsHands                   =   0;
+/*    this.atsOpportunity        =   0;
+    this.ats                   =   0;
     this.getAtsPercent              =   function() {
-        return (this.atsHands / this.atsOpportunityHands * 100);
+        return (this.ats / this.atsOpportunity * 100);
     };
-    this.bbFacingStealHands         =   0;
-    this.bbFoldVsStealHands         =   0;
+/*    this.bbFacingSteal         =   0;
+    this.bbFoldVsSteal         =   0;
     this.getBBFoldVsStealPercent    =   function() {
-        return (this.bbFoldVsStealHands / this.bbFacingStealHands * 100);
+        return (this.bbFoldVsSteal / this.bbFacingSteal * 100);
     };
+    */
 }
 
-function PlayerHand(realMoney) {
-    this.realMoney                  =   realMoney;
+function Stats(realMoney,hands) {
+    //Used to store stats about single hand and totals of multiple hands. Each stat/property indicates number of such hands, unless otherwise commented.
+    this.hands                      =   hands;
+    this.realMoney                  =   realMoney; //boolean
     this.vpip                       =   0;
     this.pfr                        =   0;
     this.atsOpportunity             =   0;
@@ -181,18 +186,19 @@ function addHand(player, handNumber, realMoney) {
         globalData.players[player].hands = [];
     }
     if (globalData.players[player].hands[parseInt(handNumber)] === undefined) {
-        globalData.players[player].hands[parseInt(handNumber)] = new PlayerHand(realMoney);
+        globalData.players[player].hands[parseInt(handNumber)] = new Stats(realMoney,1);
     }
 }
 
 function refreshPlayerData(playerName) {
-    globalData.players[playerName].totalHands           = 0;
-    globalData.players[playerName].vpipHands            = 0;
-    globalData.players[playerName].pfrHands             = 0;
-    globalData.players[playerName].atsOpportunityHands  = 0;
-    globalData.players[playerName].atsHands             = 0;
-    globalData.players[playerName].bbFacingStealHands   = 0;
-    globalData.players[playerName].bbFoldVsStealHands   = 0;
+    globalData.players[playerName].stats    =   new Stats(null,0);
+/*    globalData.players[playerName].stats.hands           = 0;
+    globalData.players[playerName].vpip            = 0;
+    globalData.players[playerName].pfr             = 0;
+    globalData.players[playerName].atsOpportunity  = 0;
+    globalData.players[playerName].ats             = 0;
+    globalData.players[playerName].bbFacingSteal   = 0;
+    globalData.players[playerName].bbFoldVsSteal   = 0;*/
     
     //include current table size in filtering
     let playersOnTableNow = globalData.playersByHand[globalData.latestHandNumber].length;
@@ -203,6 +209,7 @@ function refreshPlayerData(playerName) {
         globalData.players[playerName].filter.playersOnTableMax = playersOnTableNow;
     }
     
+    //sum the stats
     for (var handNumber in globalData.players[playerName].hands) {
         let playersOnHand = globalData.playersByHand[handNumber].length;
         if (    //passes filters
@@ -210,17 +217,23 @@ function refreshPlayerData(playerName) {
             &&  (playersOnHand >= globalData.players[playerName].filter.playersOnTableMin)
             &&  (playersOnHand <= globalData.players[playerName].filter.playersOnTableMax)
         ) {
-            globalData.players[playerName].totalHands           += 1;
-            globalData.players[playerName].vpipHands            += globalData.players[playerName].hands[parseInt(handNumber)].vpip;
-            globalData.players[playerName].pfrHands             += globalData.players[playerName].hands[parseInt(handNumber)].pfr;
-            globalData.players[playerName].atsOpportunityHands  += globalData.players[playerName].hands[parseInt(handNumber)].atsOpportunity;
-            globalData.players[playerName].atsHands             += globalData.players[playerName].hands[parseInt(handNumber)].ats;
-            globalData.players[playerName].bbFacingStealHands   += globalData.players[playerName].hands[parseInt(handNumber)].bbFacingSteal;
-            globalData.players[playerName].bbFoldVsStealHands   += globalData.players[playerName].hands[parseInt(handNumber)].bbFoldVsSteal;
+                    
+            //sum each property from each hand into the player's sums
+            for (var stat in globalData.players[playerName].hands[parseInt(handNumber)]) {
+                globalData.players[playerName].stats[stat] += globalData.players[playerName].hands[parseInt(handNumber)][stat];
+            }
+        
+/*            globalData.players[playerName].stats.hands           += 1;
+            globalData.players[playerName].vpip            += globalData.players[playerName].hands[parseInt(handNumber)].vpip;
+            globalData.players[playerName].pfr             += globalData.players[playerName].hands[parseInt(handNumber)].pfr;
+            globalData.players[playerName].atsOpportunity  += globalData.players[playerName].hands[parseInt(handNumber)].atsOpportunity;
+            globalData.players[playerName].ats             += globalData.players[playerName].hands[parseInt(handNumber)].ats;
+            globalData.players[playerName].bbFacingSteal   += globalData.players[playerName].hands[parseInt(handNumber)].bbFacingSteal;
+            globalData.players[playerName].bbFoldVsSteal   += globalData.players[playerName].hands[parseInt(handNumber)].bbFoldVsSteal;*/
         }
     }
     
-    if (globalData.players[playerName].totalHands > 500) {
+    if (globalData.players[playerName].stats.hands > 500) {
         //many hands, let's filter to get the most relevant hands
         if (globalData.players[playerName].filter.realMoney === null) {
             //filter by real/play money
@@ -422,32 +435,38 @@ function drawPlayerWindows() {
                     widgetSetText(subWidget,globalData.players[playerName].filter.getText());                        
                     subWidget.set_tooltip_text(globalData.players[playerName].filter.getTooltip());
                 } else if (subWidgetNo == 1) {  //stack size in big blinds
-                    var value = globalData.players[playerName].getStackSizeInBigBlinds();
+//                    var value = globalData.players[playerName].getStackSizeInBigBlinds();
+                    var value = globalData.players[playerName].stackSizeInChips / globalData.bigBlind;
                     widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)+" BB "));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
                     subWidget.set_tooltip_text("Stack size in big blinds (from the beginning of last hand).");
                 } else if (subWidgetNo == 2) {  //totalHands
-                    var value = globalData.players[playerName].totalHands;
+//                    var value = globalData.players[playerName].stats.hands;
+                    var value = globalData.players[playerName].stats.hands;
                     widgetSetText(subWidget,(isNaN(value) ? "" : "("+Math.round(value)+")"));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 500, true));
                     subWidget.set_tooltip_text("Total number of hands dealt to the player.");
                 } else if (subWidgetNo == 3) {  //vpip
-                    var value = globalData.players[playerName].getVpipPercent();
+//                    var value = globalData.players[playerName].getVpipPercent();
+                    var value = globalData.players[playerName].stats.vpip / globalData.players[playerName].stats.hands * 100;
                     widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
                 } else if (subWidgetNo == 4) {  //pfr
-                    var value = globalData.players[playerName].getPfrPercent();
+//                    var value = globalData.players[playerName].getPfrPercent();
+                    var value =  globalData.players[playerName].stats.pfr /  globalData.players[playerName].stats.hands * 100;
                     widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
                 } else if (subWidgetNo == 5) {  //ats
-                    var value = globalData.players[playerName].getAtsPercent();
+//                    var value = globalData.players[playerName].getAtsPercent();
+                    var value =  globalData.players[playerName].stats.ats /  globalData.players[playerName].stats.atsOpportunity * 100;
                     widgetSetText(subWidget,(isNaN(value) ? "" : " ATS "+Math.round(value)));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
                 } else if (subWidgetNo == 6) {  //BB fold vs. steal
-                    var value = globalData.players[playerName].getBBFoldVsStealPercent();
+//                    var value = globalData.players[playerName].getBBFoldVsStealPercent();
+                    var value =  globalData.players[playerName].stats.bbFoldVsSteal /  globalData.players[playerName].stats.bbFacingSteal * 100;
                     widgetSetText(subWidget,(isNaN(value) ? "" : " BBFS "+Math.round(value)));
                     subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
                     subWidget.set_tooltip_text("BB fold vs. steal. The percentage of the hands the player folds when facing a preflop steal.");

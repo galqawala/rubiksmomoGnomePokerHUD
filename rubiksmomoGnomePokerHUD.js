@@ -35,11 +35,14 @@ function Data() {
     this.facingSteal                    =   0;
 }
 
-function windowPosition(maxPlayers,positionInRelationToHero,x,y) {
+function windowPosition(maxPlayers,positionInRelationToHero,x,y,width,height,gravity) {
     this.maxPlayers                 =   parseInt(maxPlayers);
     this.positionInRelationToHero   =   parseInt(positionInRelationToHero);
     this.x                          =   parseInt(x);
     this.y                          =   parseInt(y);
+    this.width                      =   parseInt(width);
+    this.height                     =   parseInt(height);
+    this.gravity                    =   parseInt(gravity);
 }
 
 function PlayerData(playerName) {
@@ -474,13 +477,40 @@ function saveWindowPosition(window) {
         if (    globalData.windowPositions[windowPositionId].maxPlayers                 == parseInt(globalData.maxPlayers)
             &&  globalData.windowPositions[windowPositionId].positionInRelationToHero   == parseInt(window.get_title().substr(0,1))) {
         
-            globalData.windowPositions[windowPositionId].x = parseInt(window.get_position()[0]);
-            globalData.windowPositions[windowPositionId].y = parseInt(window.get_position()[1]);
+            //set window position by the edge closest to the middle of the screen and grow towards the edge of the screen
+            if (parseInt(window.get_position()[0]) < parseInt(Gdk.Screen.get_default().get_width()/2)) {
+                //left
+                if (parseInt(window.get_position()[1]) < parseInt(Gdk.Screen.get_default().get_height()/2)) {
+                    //window is in top left quarter of the screen
+                    window.set_gravity(Gdk.Gravity.SOUTH_EAST);
+                } else {
+                    //window is in bottom left quarter of the screen
+                    window.set_gravity(Gdk.Gravity.NORTH_EAST);                        
+                }
+            } else {
+                //right
+                if (parseInt(window.get_position()[1]) < parseInt(Gdk.Screen.get_default().get_height()/2)) {
+                    //window is in top right quarter of the screen
+                    window.set_gravity(Gdk.Gravity.SOUTH_WEST);
+                } else {
+                    //window is in bottom right quarter of the screen
+                    window.set_gravity(Gdk.Gravity.NORTH_WEST);                        
+                }
+            }
+
+            globalData.windowPositions[windowPositionId].x          = parseInt(window.get_position()[0]);
+            globalData.windowPositions[windowPositionId].y          = parseInt(window.get_position()[1]);
+            globalData.windowPositions[windowPositionId].width      = parseInt(window.get_size()[0]);
+            globalData.windowPositions[windowPositionId].height     = parseInt(window.get_size()[1]);
+            globalData.windowPositions[windowPositionId].gravity    = parseInt(window.get_gravity());
+            
             return;
         }
     }
 
-    globalData.windowPositions.push( new windowPosition(parseInt(globalData.maxPlayers), window.get_title().substr(0,1), window.get_position()[0], window.get_position()[1]) );
+    globalData.windowPositions.push( 
+        new windowPosition(parseInt(globalData.maxPlayers), window.get_title().substr(0,1), window.get_position()[0], window.get_position()[1], window.get_size()[0], window.get_size()[1], parseInt(window.get_gravity()) )
+    );
 }
 
 function loadWindowPosition(window) {
@@ -488,7 +518,15 @@ function loadWindowPosition(window) {
         if (    globalData.windowPositions[windowPositionId].maxPlayers                 == parseInt(globalData.maxPlayers)
             &&  globalData.windowPositions[windowPositionId].positionInRelationToHero   == parseInt(window.get_title().substr(0,1))
         ) {
-            window.move( globalData.windowPositions[windowPositionId].x , globalData.windowPositions[windowPositionId].y );
+            if (globalData.windowPositions[windowPositionId].gravity !== undefined) {
+                window.set_gravity( globalData.windowPositions[windowPositionId].gravity );
+            }
+            if (globalData.windowPositions[windowPositionId].x !== undefined && globalData.windowPositions[windowPositionId].y !== undefined) {
+                window.move(    globalData.windowPositions[windowPositionId].x      , globalData.windowPositions[windowPositionId].y        );
+            }
+            if (globalData.windowPositions[windowPositionId].width !== undefined && globalData.windowPositions[windowPositionId].height !== undefined) {
+                window.resize(  globalData.windowPositions[windowPositionId].width  , globalData.windowPositions[windowPositionId].height   );
+            }
             return;
         }
     }

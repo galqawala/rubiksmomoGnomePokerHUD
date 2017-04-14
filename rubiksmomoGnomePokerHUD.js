@@ -33,6 +33,7 @@ function Data() {
     this.maxPlayers                     =   0;
     this.windowPositions                =   [];
     this.facingSteal                    =   0;
+    this.windowLayout                   =   [["filter","bb","hands","vpip","pfr"],["ats","bbfvs","wtsd"]];
 }
 
 function windowPosition(maxPlayers,positionInRelationToHero,x,y,width,height,gravity) {
@@ -330,18 +331,31 @@ function drawPlayerWindows() {
         playerWindow.set_keep_above(true);
         playerWindow.set_type_hint(Gdk.WindowTypeHint.DIALOG);
         playerWindow.set_title(positionInRelationToHero+": "+playerName);
-        for (var widgetNo in playerWindow.get_children()) {
-            let widget = playerWindow.get_children()[widgetNo];
-            
-            while (widget.get_children().length < 8) {
-                let textView = new Gtk.TextView();
-                textView.set_editable(false);
-                textView.set_cursor_visible(false);
-                widget.add(textView);        
+        
+        //add window components if missing
+        if (playerWindow.get_children().length == 0) {
+            //add one vertical box in the window
+            let vbox = new Gtk.VBox();
+            //add x horizontal boxes in the vertical box
+            for (var hboxNo in globalData.windowLayout) {
+                let hbox = new Gtk.HBox();
+                //add x textviews in each horizontal box
+                for (var textViewNo in globalData.windowLayout[hboxNo]) {
+                    let textView = new Gtk.TextView();
+                    textView.set_editable(false);
+                    textView.set_cursor_visible(false);
+                    hbox.add(textView);
+                }
+                vbox.add(hbox);
             }
-            
-            for (var subWidgetNo in widget.get_children()) {
-                updateStatTextView(widget.get_children()[subWidgetNo], subWidgetNo, playerName);
+            playerWindow.add(vbox);
+        }
+
+        //loop and update component
+        let vbox = playerWindow.get_children()[0];
+        for (var hboxNo in vbox.get_children()) {
+            for (var textViewNo in vbox.get_children()[hboxNo].get_children()) {
+                updateStatTextView(vbox.get_children()[hboxNo].get_children()[textViewNo], hboxNo, textViewNo, playerName);
             }
         }
 
@@ -349,41 +363,43 @@ function drawPlayerWindows() {
     }
 }
 
-function updateStatTextView(subWidget, subWidgetNo, playerName) {
-    if (subWidgetNo == 0) {         //filter
+function updateStatTextView(subWidget, hboxNo, textViewNo, playerName) {
+    let statName = globalData.windowLayout[hboxNo][textViewNo];
+
+    if (statName == "filter") {         //filter
         widgetSetText(subWidget,globalData.players[playerName].filter.getText());                        
         subWidget.set_tooltip_text(globalData.players[playerName].filter.getTooltip());
-    } else if (subWidgetNo == 1) {  //stack size in big blinds
+    } else if (statName == "bb") {  //stack size in big blinds
         var value = globalData.players[playerName].stackSizeInChips / globalData.bigBlind;
         widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)+" BB "));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
         subWidget.set_tooltip_text("Stack size in big blinds (from the beginning of last hand).");
-    } else if (subWidgetNo == 2) {  //totalHands
+    } else if (statName == "hands") {  //totalHands
         var value = globalData.players[playerName].stats.hands;
         widgetSetText(subWidget,(isNaN(value) ? "" : "("+Math.round(value)+")"));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 500, true));
         subWidget.set_tooltip_text("Total number of hands dealt to the player.");
-    } else if (subWidgetNo == 3) {  //vpip
+    } else if (statName == "vpip") {  //vpip
         var value = globalData.players[playerName].stats.vpip / globalData.players[playerName].stats.hands * 100;
         widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
         subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
-    } else if (subWidgetNo == 4) {  //pfr
+    } else if (statName == "pfr") {  //pfr
         var value =  globalData.players[playerName].stats.pfr /  globalData.players[playerName].stats.hands * 100;
         widgetSetText(subWidget,(isNaN(value) ? "" : " "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
         subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
-    } else if (subWidgetNo == 5) {  //ats
+    } else if (statName == "ats") {  //ats
         var value =  globalData.players[playerName].stats.ats /  globalData.players[playerName].stats.atsOpportunity * 100;
         widgetSetText(subWidget,(isNaN(value) ? "" : " ATS "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
         subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
-    } else if (subWidgetNo == 6) {  //BB fold vs. steal
+    } else if (statName == "bbfvs") {  //BB fold vs. steal
         var value =  globalData.players[playerName].stats.bbFoldVsSteal /  globalData.players[playerName].stats.bbFacingSteal * 100;
         widgetSetText(subWidget,(isNaN(value) ? "" : " BBFS "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
         subWidget.set_tooltip_text("BB fold vs. steal. The percentage of the hands the player folds when facing a preflop steal.");
-    } else if (subWidgetNo == 7) {  //WTSD
+    } else if (statName == "wtsd") {  //WTSD
         var value =  globalData.players[playerName].stats.postflopShowdown / globalData.players[playerName].stats.wentToFlop * 100;
         widgetSetText(subWidget,(isNaN(value) ? "" : " WTSD "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
@@ -461,8 +477,6 @@ function getWindowByPositionInRelationToHero(positionInRelationToHero) {
     playerWindow.set_title(parseInt(positionInRelationToHero)+": (loading)");
 
 	loadWindowPosition(playerWindow);
-    let statBox = new Gtk.HBox();
-    playerWindow.add(statBox);
 	playerWindow.connect('destroy', Gtk.main_quit); //quit whole app when any window gets closed
 	playerWindow.connect('configure-event', function(window) { 
 	    saveWindowPosition(playerWindow);

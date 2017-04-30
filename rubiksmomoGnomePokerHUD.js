@@ -539,7 +539,7 @@ function getIcmNashUri() {
     let players     =   globalData.playersByHand[parseInt(globalData.latestHandNumber)];
     //pick players _after_ current UTG (first one is next hand's UTG)
     for (var playerNo in players) {
-        if (pickPlayer) {
+        if (pickPlayer && globalData.players[players[playerNo]].stackSizeInChips>0) {
             uri     +=  "&s"+stackId+"="+globalData.players[players[playerNo]].stackSizeInChips;
             stackId +=  1;
         } else if (players[playerNo] == globalData.playerNameOnUTG) {
@@ -548,8 +548,10 @@ function getIcmNashUri() {
     }
     //pick players until current UTG (no duplicates please)
     for (var playerNo in players) {
-        uri     +=  "&s"+stackId+"="+globalData.players[players[playerNo]].stackSizeInChips;
-        stackId +=  1;
+        if (globalData.players[players[playerNo]].stackSizeInChips>0) {
+            uri     +=  "&s"+stackId+"="+globalData.players[players[playerNo]].stackSizeInChips;
+            stackId +=  1;
+        }
         if (players[playerNo] == globalData.playerNameOnUTG) {
             break;
         }
@@ -771,4 +773,3 @@ function refreshPlayerData(playerName) {
         }
     }
 }
-

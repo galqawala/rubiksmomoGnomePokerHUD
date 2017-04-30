@@ -19,22 +19,29 @@ var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual dr
 //var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
 
 function Data() {
-    this.windowLayout                   =   [["filter","bb","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
-    this.hero                           =   "";
-    this.latestHandNumber               =   0;
-    this.processedUntilHandNumber       =   0;
-    this.seatsPickedFromHand            =   0;
-    this.heroSeat                       =   0;
-    this.bigBlind                       =   0;
-    this.players                        =   [];
-    this.realMoneyLatestHand            =   true;
-    this.playersByHand                  =   [];
-    this.atsOpportunity                 =   true;
-    this.playersLeftToAct               =   0;
-    this.maxPlayers                     =   0;
-    this.windowPositions                =   [];
-    this.facingSteal                    =   0;
-    this.raisesInCurrentStreet          =   0;
+    this.windowLayout                           =   [["filter","bb","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
+    this.heroWindowLayout                       =   [["filter","bb","icmNash","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
+    this.hero                                   =   "";
+    this.latestHandNumber                       =   0;
+    this.processedUntilHandNumber               =   0;
+    this.seatsPickedFromHand                    =   0;
+    this.seatOfHero                             =   0;
+    this.seatOfButton                           =   0;
+    this.players                                =   [];
+    this.realMoneyLatestHand                    =   true;
+    this.playersByHand                          =   [];
+    this.atsOpportunity                         =   true;
+    this.playersLeftToAct                       =   0;
+    this.maxPlayers                             =   0;
+    this.windowPositions                        =   [];
+    this.facingSteal                            =   0;
+    this.raisesInCurrentStreet                  =   0;
+    this.ante                                   =   0;
+    this.smallBlind                             =   0;
+    this.bigBlind                               =   0;
+    this.playerNameOnUTG                        =   "";
+    this.chipsPutIntoPotByPlayerOnLatestStreet  =   [];
+    this.section                                =   "";
 }
 
 function windowPosition(maxPlayers,positionInRelationToHero,x,y,width,height,gravity) {
@@ -136,7 +143,6 @@ function refreshHud() {
 }
 
 function refreshStats() {
-    print("========== refreshing ==========");
     let handDirectory           = Gio.File.new_for_path(handHistoryPath);
     let playerHandDirectories   = handDirectory.enumerate_children('standard::name', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null);
     
@@ -154,7 +160,6 @@ function refreshStats() {
             let file = playerHandFiles.get_child(fileInfo);
 
             if (!fileInfo.get_name().endsWith("~")) {
-                print("===== read file: "+fileInfo.get_name()+" =====");
                 //Process files without ~ filename suffix
                 let fileContent = file.read(null).read_bytes(1000000,null).get_data() + "";
                 let lines = fileContent.split("\n");
@@ -168,7 +173,6 @@ function refreshStats() {
 
 function getStatsFromHistoryLines(lines, heroName, realMoney) {
     let handNumber       = 0;
-    let section          = "";
 
     for (var lineNumber in lines) {
         let playerName = getPlayerNameFromLine(lines[lineNumber]);
@@ -178,8 +182,9 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
     
         //loop lines in hand history file
         if ( /PokerStars Hand #/.test(lines[lineNumber]) ) {
-            section                 = "PokerStars Hand";
-            globalData.wentToFlop   = false;
+            globalData.section      =   "PokerStars Hand";
+            globalData.wentToFlop   =   false;
+            globalData.ante         =   0;  //ante is 0, unless someone posts one later
             
             //get hand number (we'll show stats for the players that were present in last hand)
             handNumber = parseInt(lines[lineNumber].split(":")[0].split("#")[1]);
@@ -187,45 +192,89 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
                 //newest hand so far
                 globalData.latestHandNumber =   parseInt(handNumber);
                 globalData.hero             =   heroName;
+                globalData.playerNameOnUTG  =   "";
             }
         }
-        
         if (parseInt(handNumber) > globalData.processedUntilHandNumber) {
-            if ( /^Seat /.test(lines[lineNumber]) && section != "SUMMARY") {
+            if ( /^Seat /.test(lines[lineNumber]) && globalData.section != "SUMMARY") {
                 processHandSeatLine(lines[lineNumber], handNumber, playerName, realMoney);
+            } else if ( /Uncalled bet \(\d+\) returned to /.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+                let amount = getAmountFromLine(lines[lineNumber]);
+                globalData.players[playerName].stackSizeInChips += parseInt(amount);
+            } else if ( / collected \d+ from pot/.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+                let amount = getAmountFromLine(lines[lineNumber]);
+                globalData.players[playerName].stackSizeInChips += parseInt(amount);
             } else if ( /\*\*\* /.test(lines[lineNumber])) {
-                section     = lines[lineNumber].split(/\*\*\*/)[1].trim();
-                if (section=="HOLE CARDS") {
-                    globalData.atsOpportunity = true;
+                globalData.section     = lines[lineNumber].split(/\*\*\*/)[1].trim();
+                if (globalData.section=="HOLE CARDS") {
+                    globalData.atsOpportunity   =   true;
                 } else {
-                    globalData.atsOpportunity = false;                
+                    globalData.atsOpportunity   =   false;                
                 }
                 globalData.playersLeftToAct         =   globalData.playersByHand[parseInt(handNumber)].length;
                 globalData.facingSteal              =   0;
                 globalData.raisesInCurrentStreet    =   0;
-            } else if (/^Table /.test(lines[lineNumber]) && section == "PokerStars Hand") {
+            } else if (/^Table /.test(lines[lineNumber]) && globalData.section == "PokerStars Hand") {
                 processTableLine(lines[lineNumber], handNumber, realMoney);
-            } else if ( /: posts big blind \d+/.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
-                //save big blind from newest hand
-                globalData.bigBlind    = parseInt( lines[lineNumber].split(/ /).pop().trim() );
+            } else if ( /: posts (the ante|small blind|big blind) \d+/.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+                processAnteOrBlindLine(lines[lineNumber], playerName);
             } else if (/\: (checks|calls|bets|raises|folds) /.test(lines[lineNumber])) {
-                //handle all actions
-                if (section=="HOLE CARDS") {
-                    processPreflopAction(lines[lineNumber], handNumber, playerName, section);
-                } else if (section == "FLOP") {
-                    globalData.players[playerName].hands[parseInt(handNumber)].wentToFlop = 1;
-                }
-                
-                if ( /\: (raises) /.test(lines[lineNumber]) ) {
-                    globalData.raisesInCurrentStreet    +=  1;
-                }
+                processActionLine(lines[lineNumber], playerName, handNumber);
             } else if (/ finished the tournament in /.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
                 playerEliminated(playerName);
-            } else if (section == "SHOW DOWN" && /\: (mucks|shows) (hand|\[[2-9TJQKA][cdhs] [2-9TJQKA][cdhs]\])/.test(lines[lineNumber]) && globalData.players[playerName].hands[parseInt(handNumber)].wentToFlop == 1) {
+            } else if (globalData.section == "SHOW DOWN" && /\: (mucks|shows) (hand|\[[2-9TJQKA][cdhs] [2-9TJQKA][cdhs]\])/.test(lines[lineNumber]) && globalData.players[playerName].hands[parseInt(handNumber)].wentToFlop == 1) {
                 //went to showdown post flop
                 globalData.players[playerName].hands[parseInt(handNumber)].postflopShowdown = 1;    
             }
         }
+    }
+}
+
+function processActionLine(line, playerName, handNumber) {
+    //handle all actions
+    if (globalData.section=="HOLE CARDS") {
+        processPreflopAction(line, handNumber, playerName, globalData.section);
+    } else if (globalData.section == "FLOP") {
+        globalData.players[playerName].hands[parseInt(handNumber)].wentToFlop = 1;
+    }
+    
+    if ( /\: (raises) /.test(line) ) {
+        globalData.raisesInCurrentStreet    +=  1;
+        if (parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+            let amount = getAmountFromLine(line);
+            if (parseInt(globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName]) > 0) {
+                amount -= parseInt(globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName]);
+            }
+            putChipsIntoPot(playerName, parseInt(amount)); 
+        }
+    }
+    if ( /\: (bets|calls) /.test(line) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+        let amount = getAmountFromLine(line);
+        putChipsIntoPot(playerName, amount);
+    }
+}
+
+function processAnteOrBlindLine(line, playerName) {
+    //save antes&blinds from the newest hand (multiple players can post antes and in cash even blinds, pick the value from latest post)
+    let amount = parseInt( getAmountFromLine(line) );
+    if ( /: posts (the ante) \d+/.test(line) ) {
+        globalData.ante                 =   parseInt(amount);
+    } else if ( /: posts (small blind) \d+/.test(line) ) {
+        globalData.smallBlind           =   parseInt(amount);
+    } else if ( /: posts (big blind) \d+/.test(line) ) {
+        globalData.bigBlind             =   parseInt(amount);
+    }
+    putChipsIntoPot(playerName, parseInt(amount));
+}
+
+function putChipsIntoPot(playerName, amount) {
+    //used to calculate stack size after last hand
+    globalData.players[playerName].stackSizeInChips -= parseInt(amount);
+    
+    if (parseInt(globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName]) === undefined) {
+        globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName] = parseInt(amount);
+    } else {
+        globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName] += parseInt(amount);
     }
 }
 
@@ -240,10 +289,15 @@ function processTableLine(line, handNumber, realMoney) {
                 app.application.get_windows()[windowNo].close();
             }
         }
+        globalData.seatOfButton = line.split(/Seat #/)[1].split(/ /)[0];
     }                
 }
 
-function processPreflopAction(line, handNumber, playerName, section) {
+function processPreflopAction(line, handNumber, playerName) {
+    if (globalData.playerNameOnUTG == "" && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
+        //who's UTG on latest hand?
+        globalData.playerNameOnUTG  =   playerName;
+    }
     if (globalData.raisesInCurrentStreet==1) {
         //3bet
         globalData.players[playerName].hands[parseInt(handNumber)].preflop3betOpportunity = 1;
@@ -300,7 +354,7 @@ function processHandSeatLine(line, handNumber, playerName, realMoney) {
         //save players for each seat
         globalData.playerBySeat[parseInt(seat)] = playerName;
         if (playerName == globalData.hero) {
-            globalData.heroSeat = parseInt(seat);
+            globalData.seatOfHero = parseInt(seat);
         }
         //save stack sizes in big blinds
         let stack   = line.split(/\(/).pop().split(/[( ]/)[0].trim();
@@ -337,6 +391,31 @@ function getPlayerNameFromLine(line) {
     return line.split(afterPlayerName)[0].trim();
 }
 
+function getAmountFromLine(line) {
+    //Take a hand history line and strip away everything but the amount. This seems to be the only way as Poker Stars player names can include all kinds of special characters and there are no delimiters in the history files.
+    line = line.replace(" and is all-in","");
+
+    if (/Seat \d: .+ \(\d+ in chips\)/.test(line)) {
+        return  parseInt( line.split(/[( ]/).splice(-4,1) );
+    } else if (/.+: posts (the ante|small blind|big blind) \d+/.test(line)) {
+        return  parseInt( line.split(" ").splice(-1) );
+    } else if (/Uncalled bet \(\d+\) returned to .+/.test(line)) {
+        return  parseInt( line.split(/[()]/)[1] );
+    } else if (/.+ collected \d+ from pot/.test(line)) {
+        return  parseInt( line.split(/[( ]/).splice(-3,1) );
+    } else if (/.+: (calls|bets) \d+/.test(line)) {
+        return  parseInt( line.split(" ").splice(-1) );
+    } else if (/.+: raises \d+ to \d+/.test(line)) {
+        return  parseInt( line.split(" ").splice(-1) );
+    } else if (/Seat \d: .+ showed \[[2-9TJQKA][cdhs] [2-9TJQKA][cdhs]\] and won \(\d+\) with /.test(line)) {
+        return  parseInt( line.split(/[()]/).splice(-2,1) );
+    } else if (/Total pot \d+ \| Rake \d+/.test(line)) {
+        return  parseInt( line.split(" ")[2] );
+    } else {
+        return  0;
+    }
+}
+
 function drawPlayerWindows() {
     for (var seatNo in globalData.playerBySeat) {
         let playerName = globalData.playerBySeat[parseInt(seatNo)];
@@ -344,7 +423,7 @@ function drawPlayerWindows() {
         refreshPlayerData(playerName);
 
         //create a statistics window for each player in latest seats
-        let positionInRelationToHero = parseInt(seatNo) - parseInt(globalData.heroSeat);
+        let positionInRelationToHero = parseInt(seatNo) - parseInt(globalData.seatOfHero);
         if (parseInt(positionInRelationToHero) < 0) { positionInRelationToHero += parseInt(globalData.maxPlayers); }
 
         let playerWindow = getWindowByPositionInRelationToHero(parseInt(positionInRelationToHero));
@@ -357,14 +436,23 @@ function drawPlayerWindows() {
             //add one vertical box in the window
             let vbox = new Gtk.VBox();
             //add x horizontal boxes in the vertical box
-            for (var hboxNo in globalData.windowLayout) {
+            let windowLayout = getWindowLayout(playerName);
+            for (var hboxNo in windowLayout) {
                 let hbox = new Gtk.HBox();
                 //add x textviews in each horizontal box
-                for (var textViewNo in globalData.windowLayout[hboxNo]) {
-                    let textView = new Gtk.TextView();
-                    textView.set_editable(false);
-                    textView.set_cursor_visible(false);
-                    hbox.add(textView);
+                for (var widgetNo in windowLayout[hboxNo]) {
+                    let widgetName = windowLayout[hboxNo][widgetNo];
+                    if (widgetName=="icmNash") {
+                        let widget = new Gtk.LinkButton();
+                        widget.get_style_context().add_class("link");
+                        widget.set_label("P/F");
+                        hbox.add(widget);
+                    } else {
+                        let widget = new Gtk.TextView();
+                        widget.set_editable(false);
+                        widget.set_cursor_visible(false);
+                        hbox.add(widget);
+                    }
                 }
                 vbox.add(hbox);
             }
@@ -374,8 +462,8 @@ function drawPlayerWindows() {
         //loop and update component
         let vbox = playerWindow.get_children()[0];
         for (var hboxNo in vbox.get_children()) {
-            for (var textViewNo in vbox.get_children()[hboxNo].get_children()) {
-                updateStatTextView(vbox.get_children()[hboxNo].get_children()[textViewNo], hboxNo, textViewNo, playerName);
+            for (var widgetNo in vbox.get_children()[hboxNo].get_children()) {
+                refreshWidget(vbox.get_children()[hboxNo].get_children()[widgetNo], hboxNo, widgetNo, playerName);
             }
         }
 
@@ -383,8 +471,16 @@ function drawPlayerWindows() {
     }
 }
 
-function updateStatTextView(subWidget, hboxNo, textViewNo, playerName) {
-    let statName = globalData.windowLayout[hboxNo][textViewNo];
+function getWindowLayout(playerName) {
+    if (playerName == globalData.hero && globalData.heroWindowLayout !== undefined) {
+        return  globalData.heroWindowLayout;
+    } else {
+        return  globalData.windowLayout;
+    }
+}
+
+function refreshWidget(subWidget, hboxNo, widgetNo, playerName) {
+    let statName = getWindowLayout(playerName)[hboxNo][widgetNo];
 
     if (statName == "filter") {         //filter
         widgetSetText(subWidget,globalData.players[playerName].filter.getText());                        
@@ -393,7 +489,10 @@ function updateStatTextView(subWidget, hboxNo, textViewNo, playerName) {
         var value = globalData.players[playerName].stackSizeInChips / globalData.bigBlind;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " "+Math.round(value)+" BB "));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
-        subWidget.set_tooltip_text("Stack size in big blinds (from the beginning of last hand).");
+        subWidget.set_tooltip_text("Stack size ("+globalData.players[playerName].stackSizeInChips+" chips) converted&rounded into big blinds (from the beginning of last hand).");
+    } else if (statName == "icmNash") { //ICM Nash push/fold range
+        subWidget.set_uri( getIcmNashUri() );
+        subWidget.set_tooltip_text("Displays ICM Nash push/fold ranges");
     } else if (statName == "hands") {   //totalHands
         var value = globalData.players[playerName].stats.hands;
         widgetSetText(subWidget,(isNaN(value) ? "-" : "("+Math.round(value)+")"));
@@ -430,6 +529,33 @@ function updateStatTextView(subWidget, hboxNo, textViewNo, playerName) {
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
         subWidget.set_tooltip_text("The percentage of the hands that went to show down, out of the ones that saw the flop.");
     }
+}
+
+function getIcmNashUri() {
+    let uri = "http://www.holdemresources.net/h/web-calculators/nashicm/results.html?action=calculate&sb="+globalData.smallBlind+"&bb="+globalData.bigBlind+"&ante="+globalData.ante+"&structure=1.99%2C1.18%2C0.79";
+    
+    let stackId     =   1;
+    let pickPlayer  =   false;
+    let players     =   globalData.playersByHand[parseInt(globalData.latestHandNumber)];
+    //pick players _after_ current UTG (first one is next hand's UTG)
+    for (var playerNo in players) {
+        if (pickPlayer) {
+            uri     +=  "&s"+stackId+"="+globalData.players[players[playerNo]].stackSizeInChips;
+            stackId +=  1;
+        } else if (players[playerNo] == globalData.playerNameOnUTG) {
+            pickPlayer = true; //pick first player after big blind
+        }
+    }
+    //pick players until current UTG (no duplicates please)
+    for (var playerNo in players) {
+        uri     +=  "&s"+stackId+"="+globalData.players[players[playerNo]].stackSizeInChips;
+        stackId +=  1;
+        if (players[playerNo] == globalData.playerNameOnUTG) {
+            break;
+        }
+    }
+    
+    return  uri;
 }
 
 function widgetSetText(widget,text) {
@@ -576,9 +702,7 @@ function saveData() {
     if (!file.query_exists(null)) {
         var file_stream = file.create(Gio.FileCreateFlags.NONE,null);
     }
-    if (!file.query_exists(null)) {
-        print("Failed to save window position!");
-    } else {
+    if (file.query_exists(null)) {
         file.replace_contents(JSON.stringify(globalData.windowPositions),null,false,Gio.FileCreateFlags.NONE,null);
     }
 }

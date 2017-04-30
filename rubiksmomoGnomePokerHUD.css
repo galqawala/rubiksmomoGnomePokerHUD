@@ -2,4 +2,9 @@
 	background-color:	rgb(40,40,40);
 	color:				white;
 	font-weight: 		bold;
+	border:             none;
+}
+.link {
+    border:             none;
+    text-decoration:    underline;
 }

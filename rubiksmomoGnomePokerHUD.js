@@ -21,6 +21,7 @@ var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual dr
 function Data() {
     this.windowLayout                           =   [["filter","bb","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
     this.heroWindowLayout                       =   [["filter","bb","icmNash","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
+    this.processHandsUntilNo                    =   0;   //Wanna see stats at some specific point in past? Use 0 to process all.
     this.hero                                   =   "";
     this.latestHandNumber                       =   0;
     this.processedUntilHandNumber               =   0;
@@ -184,18 +185,18 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
         if ( /PokerStars Hand #/.test(lines[lineNumber]) ) {
             globalData.section      =   "PokerStars Hand";
             globalData.wentToFlop   =   false;
-            globalData.ante         =   0;  //ante is 0, unless someone posts one later
             
             //get hand number (we'll show stats for the players that were present in last hand)
             handNumber = parseInt(lines[lineNumber].split(":")[0].split("#")[1]);
-            if (parseInt(handNumber) > parseInt(globalData.latestHandNumber)) {
+            if (parseInt(handNumber) > parseInt(globalData.latestHandNumber) && (parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(handNumber) <= parseInt(globalData.processHandsUntilNo)) ) {
                 //newest hand so far
                 globalData.latestHandNumber =   parseInt(handNumber);
                 globalData.hero             =   heroName;
                 globalData.playerNameOnUTG  =   "";
+                globalData.ante             =   0;  //reset ante to 0 in case it's from an earlier table
             }
         }
-        if (parseInt(handNumber) > globalData.processedUntilHandNumber) {
+        if (parseInt(handNumber) > parseInt(globalData.processedUntilHandNumber) && (parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(handNumber) <= parseInt(globalData.processHandsUntilNo)) ) {
             if ( /^Seat /.test(lines[lineNumber]) && globalData.section != "SUMMARY") {
                 processHandSeatLine(lines[lineNumber], handNumber, playerName, realMoney);
             } else if ( /Uncalled bet \(\d+\) returned to /.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
@@ -259,6 +260,7 @@ function processAnteOrBlindLine(line, playerName) {
     let amount = parseInt( getAmountFromLine(line) );
     if ( /: posts (the ante) \d+/.test(line) ) {
         globalData.ante                 =   parseInt(amount);
+        //print("ante "+globalData.ante);
     } else if ( /: posts (small blind) \d+/.test(line) ) {
         globalData.smallBlind           =   parseInt(amount);
     } else if ( /: posts (big blind) \d+/.test(line) ) {

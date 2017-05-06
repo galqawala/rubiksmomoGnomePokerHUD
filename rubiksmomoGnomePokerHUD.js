@@ -5,11 +5,12 @@
     https://wibblystuff.blogspot.fi/2015/05/first-time-for-everything-gnome.html
 */
 
-const Lang = imports.lang;
-const Gtk  = imports.gi.Gtk;
-const Gdk  = imports.gi.Gdk;
-const GLib = imports.gi.GLib;
-const Gio  = imports.gi.Gio;
+const Lang      =   imports.lang;
+const Gtk       =   imports.gi.Gtk;
+const Gdk       =   imports.gi.Gdk;
+const GLib      =   imports.gi.GLib;
+const Gio       =   imports.gi.Gio;
+const WebKit2   =   imports.gi.WebKit2;
 
 var globalData                  = new Data();
 //path of the hud directory
@@ -22,6 +23,7 @@ function Data() {
     this.windowLayout                           =   [["filter","bb","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
     this.heroWindowLayout                       =   [["filter","bb","icmNash","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
     this.processHandsUntilNo                    =   0;   //Wanna see stats at some specific point in past? Use 0 to process all.
+    this.refreshIntervalMilliseconds            =   4000;
     this.hero                                   =   "";
     this.latestHandNumber                       =   0;
     this.processedUntilHandNumber               =   0;
@@ -43,6 +45,9 @@ function Data() {
     this.playerNameOnUTG                        =   "";
     this.chipsPutIntoPotByPlayerOnLatestStreet  =   [];
     this.section                                =   "";
+    this.icmNashChart                           =   undefined;
+    this.priceStructure                         =   "";
+    this.handRank                               =    ["AA","KK","QQ","AKs","JJ","AQs","KQs","AJs","KJs","TT","AKo","ATs","QJs","KTs","QTs","JTs","99","AQo","A9s","KQo","88","K9s","T9s","A8s","Q9s","J9s","AJo","A5s","77","A7s","KJo","A4s","A3s","A6s","QJo","66","K8s","T8s","A2s","98s","J8s","ATo","Q8s","K7s","KTo","55","JTo","87s","QTo","44","33","22","K6s","97s","K5s","76s","T7s","K4s","K3s","K2s","Q7s","86s","65s","J7s","54s","Q6s","75s","96s","Q5s","64s","Q4s","Q3s","T9o","T6s","Q2s","A9o","53s","85s","J6s","J9o","K9o","J5s","Q9o","43s","74s","J4s","J3s","95s","J2s","63s","A8o","52s","T5s","84s","T4s","T3s","42s","T2s","98o","T8o","A5o","A7o","73s","A4o","32s","94s","93s","J8o","A3o","62s","92s","K8o","A6o","87o","Q8o","83s","A2o","82s","97o","72s","76o","K7o","65o","T7o","K6o","86o","54o","K5o","J7o","75o","Q7o","K4o","K3o","96o","K2o","64o","Q6o","53o","85o","T6o","Q5o","43o","Q4o","Q3o","74o","Q2o","J6o","63o","J5o","95o","52o","J4o","J3o","42o","J2o","84o","T5o","T4o","32o","T3o","73o","T2o","62o","94o","93o","92o","83o","82o","72o"];
 }
 
 function windowPosition(maxPlayers,positionInRelationToHero,x,y,width,height,gravity) {
@@ -128,7 +133,7 @@ const rubiksmomoGnomePokerHUD = new Lang.Class({
         
         loadData();
         refreshHud();
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, refreshHud);
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, globalData.refreshIntervalMilliseconds, refreshHud);
         Gtk.main();
     }
 });
@@ -194,6 +199,10 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
                 globalData.hero             =   heroName;
                 globalData.playerNameOnUTG  =   "";
                 globalData.ante             =   0;  //reset ante to 0 in case it's from an earlier table
+                globalData.priceStructure   =   "1";  //winner takes it all
+                if ( / Level /.test(lines[lineNumber]) ) {
+                    globalData.priceStructure   =   "1.99%2C1.18%2C0.79";  //structure (separator is %2C)
+                }
             }
         }
         if (parseInt(handNumber) > parseInt(globalData.processedUntilHandNumber) && (parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(handNumber) <= parseInt(globalData.processHandsUntilNo)) ) {
@@ -504,22 +513,22 @@ function refreshWidget(subWidget, hboxNo, widgetNo, playerName) {
         var value = globalData.players[playerName].stats.vpip / globalData.players[playerName].stats.hands * 100;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-        subWidget.set_tooltip_text("Voluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
+        subWidget.set_tooltip_text(getRangeDescription(value)+"\nVoluntarily Put $ In Pot. Percentage of hands the player called or raised preflop.");
     } else if (statName == "pfr") {     //pfr
         var value =  globalData.players[playerName].stats.pfr /  globalData.players[playerName].stats.hands * 100;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-        subWidget.set_tooltip_text("Pre Flop Raise. The percentage of the hands a player raises before the flop.");
+        subWidget.set_tooltip_text(getRangeDescription(value)+"\nPre Flop Raise. The percentage of the hands a player raises before the flop.");
     } else if (statName == "preflop3bet") { //preflop3bet
         var value =  globalData.players[playerName].stats.preflop3bet /  globalData.players[playerName].stats.preflop3betOpportunity * 100;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " 3B "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-        subWidget.set_tooltip_text("Preflop 3bet. How often does the player reraise preflop when there's one raise before them.");
+        subWidget.set_tooltip_text(getRangeDescription(value)+"\nPreflop 3bet. How often does the player reraise preflop when there's one raise before them.");
     } else if (statName == "ats") {     //ats
         var value =  globalData.players[playerName].stats.ats /  globalData.players[playerName].stats.atsOpportunity * 100;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " ATS "+Math.round(value)));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 100, true));
-        subWidget.set_tooltip_text("Attempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
+        subWidget.set_tooltip_text(getRangeDescription(value)+"\nAttempt To Steal the blinds. The percentage of the hands a player raises before the flop, when folded to them in cutoff, button or small blind.");
     } else if (statName == "bbfvs") {   //BB fold vs. steal
         var value =  globalData.players[playerName].stats.bbFoldVsSteal /  globalData.players[playerName].stats.bbFacingSteal * 100;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " BBFS "+Math.round(value)));
@@ -533,8 +542,46 @@ function refreshWidget(subWidget, hboxNo, widgetNo, playerName) {
     }
 }
 
+function getRangeDescription(percentage) {
+    let selectedHands   =   0;
+    let totalHands      =   52*51;
+    let targetHands     =   (percentage/100)*totalHands;
+    
+    //weakest hands per category in selected range
+    let pairRange       =   "";
+    let suitedRange     =   "";
+    let offsuitRange    =   "";
+
+    for (var handNo in globalData.handRank) {
+        let hand    =   globalData.handRank[handNo];
+        let hands   =   0;
+        if (/[2-9TJQKA]{2}$/.test(hand) ) {
+            hands = 4*3;    //pair combos
+        } else if (/[2-9TJQKA]{2}s/.test(hand) ) {
+            hands = 8*1;    //suited combos
+        } else {
+            hands = 8*3;    //offsuit combos
+        }
+        
+        if ( Math.abs(selectedHands+hands-targetHands) < Math.abs(selectedHands-targetHands) ) {
+            selectedHands += hands;        
+            if (/[2-9TJQKA]{2}$/.test(hand) ) {
+                pairRange       =   hand+"+";   //weakest selected pair
+            } else if (/[2-9TJQKA]{2}s/.test(hand) ) {
+                suitedRange     =   hand+"+";   //weakest selected suited hand
+            } else {
+                offsuitRange    =   hand+"+";   //weakest selected offsuit hand
+            }
+        } else {
+            break;
+        }
+    }
+    return  "Estimated range: "+(pairRange+" "+suitedRange+" "+offsuitRange).trim();
+
+}
+
 function getIcmNashUri() {
-    let uri = "http://www.holdemresources.net/h/web-calculators/nashicm/results.html?action=calculate&sb="+globalData.smallBlind+"&bb="+globalData.bigBlind+"&ante="+globalData.ante+"&structure=1.99%2C1.18%2C0.79";
+    let uri = "http://www.holdemresources.net/h/web-calculators/nashicm/results.html?action=calculate&sb="+globalData.smallBlind+"&bb="+globalData.bigBlind+"&ante="+globalData.ante+"&structure="+globalData.priceStructure;
     
     let stackId     =   1;
     let pickPlayer  =   false;
@@ -560,6 +607,26 @@ function getIcmNashUri() {
     }
     
     return  uri;
+}
+
+function icmNash(uri) {
+    //We need to do a post and read the charts from json. A chart looks like 169 0-1 values in a row. 
+    if (globalData.icmNashChart === undefined || globalData.icmNashChart.get_uri() != uri) {
+        globalData.icmNashChart = new WebKit2.WebView();
+        globalData.icmNashChart.load_uri(uri);
+        globalData.icmNashChart.connect('load-changed', 
+            function (webView, load_event) {
+                if (load_event == WebKit2.LoadEvent.FINISHED) {
+                    print("DONE: "+webView.get_uri()+"\n\n");
+                    globalData.icmNashChart.get_main_resource().get_data(null,
+                        function onAsyncReadyCallback(source_object,result) {
+                            print(globalData.icmNashChart.get_main_resource().get_data_finish(result));
+                        }
+                    );
+                }
+            }
+        );
+    }
 }
 
 function widgetSetText(widget,text) {

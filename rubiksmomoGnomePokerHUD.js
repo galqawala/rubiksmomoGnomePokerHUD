@@ -190,6 +190,7 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
         if ( /PokerStars Hand #/.test(lines[lineNumber]) ) {
             globalData.section      =   "PokerStars Hand";
             globalData.wentToFlop   =   false;
+            globalData.chipsPutIntoPotByPlayerOnLatestStreet   =   [];
             
             //get hand number (we'll show stats for the players that were present in last hand)
             handNumber = parseInt(lines[lineNumber].split(":")[0].split("#")[1]);
@@ -220,10 +221,11 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
                     globalData.atsOpportunity   =   true;
                 } else {
                     globalData.atsOpportunity   =   false;                
+                    globalData.chipsPutIntoPotByPlayerOnLatestStreet   =   [];
                 }
-                globalData.playersLeftToAct         =   globalData.playersByHand[parseInt(handNumber)].length;
-                globalData.facingSteal              =   0;
-                globalData.raisesInCurrentStreet    =   0;
+                globalData.playersLeftToAct             =   globalData.playersByHand[parseInt(handNumber)].length;
+                globalData.facingSteal                  =   0;
+                globalData.raisesInCurrentStreet        =   0;
             } else if (/^Table /.test(lines[lineNumber]) && globalData.section == "PokerStars Hand") {
                 processTableLine(lines[lineNumber], handNumber, realMoney);
             } else if ( /: posts (the ante|small blind|big blind) \d+/.test(lines[lineNumber]) && parseInt(handNumber) == parseInt(globalData.latestHandNumber)) {
@@ -269,7 +271,6 @@ function processAnteOrBlindLine(line, playerName) {
     let amount = parseInt( getAmountFromLine(line) );
     if ( /: posts (the ante) \d+/.test(line) ) {
         globalData.ante                 =   parseInt(amount);
-        //print("ante "+globalData.ante);
     } else if ( /: posts (small blind) \d+/.test(line) ) {
         globalData.smallBlind           =   parseInt(amount);
     } else if ( /: posts (big blind) \d+/.test(line) ) {
@@ -281,8 +282,8 @@ function processAnteOrBlindLine(line, playerName) {
 function putChipsIntoPot(playerName, amount) {
     //used to calculate stack size after last hand
     globalData.players[playerName].stackSizeInChips -= parseInt(amount);
-    
-    if (parseInt(globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName]) === undefined) {
+
+    if (isNaN(globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName])) {
         globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName] = parseInt(amount);
     } else {
         globalData.chipsPutIntoPotByPlayerOnLatestStreet[playerName] += parseInt(amount);
@@ -500,7 +501,7 @@ function refreshWidget(subWidget, hboxNo, widgetNo, playerName) {
         var value = globalData.players[playerName].stackSizeInChips / globalData.bigBlind;
         widgetSetText(subWidget,(isNaN(value) ? "-" : " "+Math.round(value)+" BB "));
         subWidget.override_color(Gtk.StateFlags.NORMAL, getStatColor(value, 200, false));
-        subWidget.set_tooltip_text("Stack size ("+globalData.players[playerName].stackSizeInChips+" chips) converted&rounded into big blinds (from the beginning of last hand).");
+        subWidget.set_tooltip_text("Stack size ("+globalData.players[playerName].stackSizeInChips+" chips) converted&rounded into big blinds.");
     } else if (statName == "icmNash") { //ICM Nash push/fold range
         subWidget.set_uri( getIcmNashUri() );
         subWidget.set_tooltip_text("Displays ICM Nash push/fold ranges");
@@ -607,26 +608,6 @@ function getIcmNashUri() {
     }
     
     return  uri;
-}
-
-function icmNash(uri) {
-    //We need to do a post and read the charts from json. A chart looks like 169 0-1 values in a row. 
-    if (globalData.icmNashChart === undefined || globalData.icmNashChart.get_uri() != uri) {
-        globalData.icmNashChart = new WebKit2.WebView();
-        globalData.icmNashChart.load_uri(uri);
-        globalData.icmNashChart.connect('load-changed', 
-            function (webView, load_event) {
-                if (load_event == WebKit2.LoadEvent.FINISHED) {
-                    print("DONE: "+webView.get_uri()+"\n\n");
-                    globalData.icmNashChart.get_main_resource().get_data(null,
-                        function onAsyncReadyCallback(source_object,result) {
-                            print(globalData.icmNashChart.get_main_resource().get_data_finish(result));
-                        }
-                    );
-                }
-            }
-        );
-    }
 }
 
 function widgetSetText(widget,text) {

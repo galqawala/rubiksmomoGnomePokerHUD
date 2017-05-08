@@ -1,6 +1,7 @@
 #!/usr/bin/gjs
 
 /*
+    FLOP CBET:  https://www.myholdempokertips.com/hud-stats-continuation-bet
     https://people.gnome.org/~gcampagna/docs/
     https://wibblystuff.blogspot.fi/2015/05/first-time-for-everything-gnome.html
 */
@@ -20,7 +21,13 @@ var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual dr
 //var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
 
 function Data() {
-    this.windowLayout                           =   [["filter","bb","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
+    this.windowLayout                           =   [   ["filter","bb","hands","vpip","pfr"]
+                                                    ,   ["preflop3bet","ats","bbfvs","wtsd"]
+                                                    ,   ["title_notes_range_preflop_weak"   ,"notes_range_preflop_weak" ,"title_notes_range_preflop_strong" ,"notes_range_preflop_strong"   ]
+                                                    ,   ["title_notes_range_flop_weak"      ,"notes_range_flop_weak"    ,"title_notes_range_flop_strong"    ,"notes_range_flop_strong"      ]
+                                                    ,   ["title_notes_range_turn_weak"      ,"notes_range_turn_weak"    ,"title_notes_range_turn_strong"    ,"notes_range_turn_strong"      ]
+                                                    ,   ["title_notes_range_river_weak"     ,"notes_range_river_weak"   ,"title_notes_range_river_strong"   ,"notes_range_river_strong"     ]
+                                                    ];
     this.heroWindowLayout                       =   [["filter","bb","icmNash","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
     this.processHandsUntilNo                    =   0;   //Wanna see stats at some specific point in past? Use 0 to process all.
     this.refreshIntervalMilliseconds            =   4000;
@@ -204,6 +211,7 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
                 if ( / Level /.test(lines[lineNumber]) ) {
                     globalData.priceStructure   =   "1.99%2C1.18%2C0.79";  //structure (separator is %2C)
                 }
+                storeHandNotes(parseInt(handNumber));
             }
         }
         if (parseInt(handNumber) > parseInt(globalData.processedUntilHandNumber) && (parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(handNumber) <= parseInt(globalData.processHandsUntilNo)) ) {
@@ -239,6 +247,35 @@ function getStatsFromHistoryLines(lines, heroName, realMoney) {
                 globalData.players[playerName].hands[parseInt(handNumber)].postflopShowdown = 1;    
             }
         }
+    }
+}
+
+function storeHandNotes(handNumber) {
+    let notes = "HAND: "+handNumber;
+    for (var windowNo in app.application.get_windows()) {
+        let window      = app.application.get_windows()[windowNo];
+        let playerName  = window.get_title().substr(3);
+        let vbox        = window.get_children()[0];
+        notes += "\n\nPLAYER: "+playerName+"\n";
+        
+        for (var hboxNo in vbox.get_children()) {
+            for (var widgetNo in vbox.get_children()[hboxNo].get_children()) {
+                let widget = vbox.get_children()[hboxNo].get_children()[widgetNo];
+                let widgetName = getWindowLayout(playerName)[hboxNo][widgetNo];
+                if (typeof widget.get_buffer === 'function' && !(/^title_/.test(widgetName)) ) {
+                    let widgetText = widgetGetText(widget);
+                    if (/[^\s\.]/.test(widgetText) ) {
+                        notes += "\n\t"+widgetName+": "+widgetText.trim();
+                    }
+                }
+                if (/^notes_/.test(widgetName)) {
+                    widgetSetText(widget,"...");   
+                }
+            }
+        }
+    }
+    if (/\snotes_/.test(notes)) {
+        saveFile("notes/hand"+handNumber,notes);
     }
 }
 
@@ -461,8 +498,23 @@ function drawPlayerWindows() {
                         hbox.add(widget);
                     } else {
                         let widget = new Gtk.TextView();
-                        widget.set_editable(false);
-                        widget.set_cursor_visible(false);
+                        if (/^notes_range_/.test(widgetName)) {
+                            widget.set_editable(true);
+                            widget.set_cursor_visible(true);
+                            if (/^notes_range_.+_weak$/.test(widgetName)) {
+                                widget.set_tooltip_text("Fill in here your estimate about the part of this player's range on "+widgetName.split("_")[2]+" that your current hand beats.");
+                            } else {
+                                widget.set_tooltip_text("Fill in here your estimate about the part of this player's range on "+widgetName.split("_")[2]+" that beats your current hand.");
+                            }
+                            widgetSetText(widget,"...");
+                            widget.get_style_context().add_class("notes");
+                        } else {
+                            widget.set_editable(false);
+                            widget.set_cursor_visible(false);
+                            if (/^title_notes_range_/.test(widgetName)) {
+                                widgetSetText(widget," "+widgetName.replace("title_notes_range_","").replace("preflop_","PF").replace("flop_","F").replace("turn_","T").replace("river_","R").replace("weak","-").replace("strong","+")+": ");
+                            }
+                        }
                         hbox.add(widget);
                     }
                 }
@@ -615,6 +667,10 @@ function widgetSetText(widget,text) {
     textBuffer.set_text(text, text.length);
     widget.set_buffer(textBuffer);
 }
+function widgetGetText(widget) {
+    let textBuffer = widget.get_buffer();
+    return textBuffer.get_text(textBuffer.get_start_iter(), textBuffer.get_end_iter(), false);
+}
 
 function getStatColor(value, maxValue, lowIsRed) {
     //hue:    worst=0 (red),   best=2/3 (blue)
@@ -741,21 +797,22 @@ function loadWindowPosition(window) {
             if (globalData.windowPositions[windowPositionId].x !== undefined && globalData.windowPositions[windowPositionId].y !== undefined) {
                 window.move(    globalData.windowPositions[windowPositionId].x      , globalData.windowPositions[windowPositionId].y        );
             }
-            if (globalData.windowPositions[windowPositionId].width !== undefined && globalData.windowPositions[windowPositionId].height !== undefined) {
-                window.resize(  globalData.windowPositions[windowPositionId].width  , globalData.windowPositions[windowPositionId].height   );
-            }
             return;
         }
     }
 }
 
 function saveData() {
-    let file = Gio.file_new_for_path(hudPath+"/data");
+    saveFile("data",JSON.stringify(globalData.windowPositions));
+}
+
+function saveFile(filename,content) {
+    let file = Gio.file_new_for_path(hudPath+"/"+filename);
     if (!file.query_exists(null)) {
         var file_stream = file.create(Gio.FileCreateFlags.NONE,null);
     }
     if (file.query_exists(null)) {
-        file.replace_contents(JSON.stringify(globalData.windowPositions),null,false,Gio.FileCreateFlags.NONE,null);
+        file.replace_contents(content,null,false,Gio.FileCreateFlags.NONE,null);
     }
 }
 

@@ -28,13 +28,12 @@ function Data() {
                                                     ,   ["title_notes_range_river_weak"     ,"notes_range_river_weak"   ,"title_notes_range_river_strong"   ,"notes_range_river_strong"     ]
                                                     ];
     this.heroWindowLayout                       =   [["bb","icmNash","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
-    this.processHandsUntilNo                    =   170329504441;   //Wanna see stats at some specific point in past? Use 0 to process all.
+    this.processHandsUntilNo                    =   0;   //Wanna see stats at some specific point in past? Use 0 to process all.
     this.refreshIntervalMilliseconds            =   4000;
     this.maxHands                               =   500;    //If player has more than this many hands in history, the most relevant this many hands are used to calculate the stats. 
     this.hero                                   =   "";
     this.latestHandNumber                       =   0;
     this.handNumberBeingProcessed               =   0;
-    this.processedUntilHandNumber               =   0;
     this.seatsPickedFromHand                    =   0;
     this.seatOfHero                             =   0;
     this.seatOfButton                           =   0;
@@ -56,6 +55,7 @@ function Data() {
     this.icmNashChart                           =   undefined;
     this.priceStructure                         =   "";
     this.completedHistoryFiles                  =   [];
+    this.lastLineProcessedByFile                =   [];
     this.timeFromHandBeingProcessed             =   new Date(0);
     this.timeFromOldestHand                     =   new Date();
     this.timeFromNewestHand                     =   new Date(0);
@@ -73,10 +73,11 @@ function WindowPosition(maxPlayers,positionInRelationToHero,x,y,width,height,gra
 }
 
 function PlayerData(playerName) {
-    this.playerName                 =   playerName;
-    this.seat                       =   0;
-    this.stackSizeInChips           =   0;
-    this.stats                      =   [];
+    this.playerName                     =   playerName;
+    this.seat                           =   0;
+    this.stackSizeInChips               =   0;
+    this.stats                          =   [];
+    this.leastRelevantHandUsedInStats   =   "";
 }
 
 function Stats(hands,realMoney,handNumber,time) {
@@ -154,62 +155,70 @@ function refreshStats() {
                 let fileContent = file.read(null).read_bytes(1000000,null).get_data() + "";
                 let lines = fileContent.split("\n");
                 getStatsFromHistoryLines(lines, playerHandDirectoryInfo.get_name(), !( / Play Money /.test(fileInfo.get_name()) ), fileInfo.get_name() );
-                let timeSinceLastHand = new Date() - globalData.timeFromHandBeingProcessed;
-                if (timeSinceLastHand > 1000*60*60) {
-                    globalData.completedHistoryFiles.push(fileInfo.get_name());
-                }
             }
         }
     }
-    
-    globalData.processedUntilHandNumber = parseInt(globalData.latestHandNumber);
 }
 
 function getStatsFromHistoryLines(lines, heroName, realMoney, historyFileName) {
-    for (var lineNumber in lines) {
-        let playerName = getPlayerNameFromLine(lines[lineNumber]);
-        if (globalData.players[playerName] === undefined) {
-            globalData.players[playerName] = new PlayerData(playerName);
+    //Continue reading from the last line we read during last pass.
+    let lineNumber   = globalData.lastLineProcessedByFile[historyFileName];
+    if (isNaN(lineNumber)) { lineNumber = 0; }
+    
+    /*  Simplified example: Let's say we read 2 lines first time. Line 0 had content and line 1 was empty. Length needs to be more than 2 before we should read more (starting from line 1). 
+        Line 1 was initially empty, but may have content now. PokerStars adds a line break after writing content, but not before. */
+    if (lines.length > lineNumber+1) { 
+        for (; lineNumber < lines.length; lineNumber++) {
+            let playerName = getPlayerNameFromLine(lines[lineNumber]);
+            if (globalData.players[playerName] === undefined) {
+                globalData.players[playerName] = new PlayerData(playerName);
+            }
+        
+            //loop lines in hand history file
+            if ( /PokerStars Hand #/.test(lines[lineNumber]) ) {
+                processHandLine(lines[lineNumber],heroName);
+            }
+            if ( parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(globalData.handNumberBeingProcessed) <= parseInt(globalData.processHandsUntilNo) ) {
+                if ( /^Seat /.test(lines[lineNumber]) && globalData.section != "SUMMARY") {
+                    processHandSeatLine(lines[lineNumber], playerName, realMoney);
+                } else if ( /Uncalled bet \(\d+\) returned to /.test(lines[lineNumber]) && parseInt(globalData.handNumberBeingProcessed) == parseInt(globalData.latestHandNumber)) {
+                    let amount = getAmountFromLine(lines[lineNumber]);
+                    globalData.players[playerName].stackSizeInChips += parseInt(amount);
+                } else if ( / collected \d+ from pot/.test(lines[lineNumber]) && parseInt(globalData.handNumberBeingProcessed) == parseInt(globalData.latestHandNumber)) {
+                    let amount = getAmountFromLine(lines[lineNumber]);
+                    globalData.players[playerName].stackSizeInChips += parseInt(amount);
+                } else if ( /\*\*\* /.test(lines[lineNumber])) {
+                    globalData.section     = lines[lineNumber].split(/\*\*\*/)[1].trim();
+                    if (globalData.section=="HOLE CARDS") {
+                        globalData.atsOpportunity   =   true;
+                    } else {
+                        globalData.atsOpportunity   =   false;                
+                        globalData.chipsPutIntoPotByPlayerOnLatestStreet   =   [];
+                    }
+                    globalData.playersLeftToAct             =   globalData.playersByHand[parseInt(globalData.handNumberBeingProcessed)].length;
+                    globalData.facingSteal                  =   0;
+                    globalData.raisesInCurrentStreet        =   0;
+                } else if (/^Table /.test(lines[lineNumber]) && globalData.section == "PokerStars Hand") {
+                    processTableLine(lines[lineNumber], globalData.handNumberBeingProcessed, realMoney);
+                } else if ( /: posts (the ante|small blind|big blind) \d+/.test(lines[lineNumber]) && parseInt(globalData.handNumberBeingProcessed) == parseInt(globalData.latestHandNumber)) {
+                    processAnteOrBlindLine(lines[lineNumber], playerName);
+                } else if (/\: (checks|calls|bets|raises|folds) /.test(lines[lineNumber])) {
+                    processActionLine(lines[lineNumber], playerName, globalData.handNumberBeingProcessed);
+                } else if (/( finished the tournament in | wins the tournament and receives )/.test(lines[lineNumber])) {
+                    playerEliminated(playerName, heroName, historyFileName);
+                } else if (globalData.section == "SHOW DOWN" && /\: (mucks|shows) (hand|\[[2-9TJQKA][cdhs] [2-9TJQKA][cdhs]\])/.test(lines[lineNumber]) 
+                    && globalData.players[playerName].hands[globalData.players[playerName].hands.length-1].wentToFlop == 1) {
+                    
+                    //went to showdown post flop
+                    globalData.players[playerName].hands[globalData.players[playerName].hands.length-1].postflopShowdown = 1;    
+                }
+            }
         }
     
-        //loop lines in hand history file
-        if ( /PokerStars Hand #/.test(lines[lineNumber]) ) {
-            processHandLine(lines[lineNumber],heroName);
-        }
-        if ( parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(globalData.handNumberBeingProcessed) <= parseInt(globalData.processHandsUntilNo) ) {
-            if ( /^Seat /.test(lines[lineNumber]) && globalData.section != "SUMMARY") {
-                processHandSeatLine(lines[lineNumber], playerName, realMoney);
-            } else if ( /Uncalled bet \(\d+\) returned to /.test(lines[lineNumber]) && parseInt(globalData.handNumberBeingProcessed) == parseInt(globalData.latestHandNumber)) {
-                let amount = getAmountFromLine(lines[lineNumber]);
-                globalData.players[playerName].stackSizeInChips += parseInt(amount);
-            } else if ( / collected \d+ from pot/.test(lines[lineNumber]) && parseInt(globalData.handNumberBeingProcessed) == parseInt(globalData.latestHandNumber)) {
-                let amount = getAmountFromLine(lines[lineNumber]);
-                globalData.players[playerName].stackSizeInChips += parseInt(amount);
-            } else if ( /\*\*\* /.test(lines[lineNumber])) {
-                globalData.section     = lines[lineNumber].split(/\*\*\*/)[1].trim();
-                if (globalData.section=="HOLE CARDS") {
-                    globalData.atsOpportunity   =   true;
-                } else {
-                    globalData.atsOpportunity   =   false;                
-                    globalData.chipsPutIntoPotByPlayerOnLatestStreet   =   [];
-                }
-                globalData.playersLeftToAct             =   globalData.playersByHand[parseInt(globalData.handNumberBeingProcessed)].length;
-                globalData.facingSteal                  =   0;
-                globalData.raisesInCurrentStreet        =   0;
-            } else if (/^Table /.test(lines[lineNumber]) && globalData.section == "PokerStars Hand") {
-                processTableLine(lines[lineNumber], globalData.handNumberBeingProcessed, realMoney);
-            } else if ( /: posts (the ante|small blind|big blind) \d+/.test(lines[lineNumber]) && parseInt(globalData.handNumberBeingProcessed) == parseInt(globalData.latestHandNumber)) {
-                processAnteOrBlindLine(lines[lineNumber], playerName);
-            } else if (/\: (checks|calls|bets|raises|folds) /.test(lines[lineNumber])) {
-                processActionLine(lines[lineNumber], playerName, globalData.handNumberBeingProcessed);
-            } else if (/( finished the tournament in | wins the tournament and receives )/.test(lines[lineNumber])) {
-                playerEliminated(playerName, heroName, historyFileName);
-            } else if (globalData.section == "SHOW DOWN" && /\: (mucks|shows) (hand|\[[2-9TJQKA][cdhs] [2-9TJQKA][cdhs]\])/.test(lines[lineNumber]) 
-                && globalData.players[playerName].hands[globalData.players[playerName].hands.length-1].wentToFlop == 1) {
-                
-                //went to showdown post flop
-                globalData.players[playerName].hands[globalData.players[playerName].hands.length-1].postflopShowdown = 1;    
-            }
+        globalData.lastLineProcessedByFile[historyFileName] = lineNumber-1;
+        let timeSinceLastHand = new Date() - globalData.timeFromHandBeingProcessed;
+        if (timeSinceLastHand > 1000*60*60) {
+            globalData.completedHistoryFiles.push(historyFileName);
         }
     }
 }
@@ -230,7 +239,8 @@ function processHandLine(line,heroName) {
 
     //get hand number (we'll show stats for the players that were present in last hand)
     globalData.handNumberBeingProcessed = parseInt(line.split(":")[0].split("#")[1]);
-    if (parseInt(globalData.handNumberBeingProcessed) > parseInt(globalData.latestHandNumber) && (parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(globalData.handNumberBeingProcessed) <= parseInt(globalData.processHandsUntilNo)) ) {
+    if (    parseInt(globalData.handNumberBeingProcessed) > parseInt(globalData.latestHandNumber) 
+        && (parseInt(globalData.processHandsUntilNo) <= parseInt(0) || parseInt(globalData.handNumberBeingProcessed) <= parseInt(globalData.processHandsUntilNo)) ) {
         //newest hand so far
         globalData.latestHandNumber =   parseInt(globalData.handNumberBeingProcessed);
         globalData.hero             =   heroName;
@@ -350,6 +360,7 @@ function processPreflopAction(line, handNumber, playerName) {
     }
     if (globalData.atsOpportunity && globalData.playersLeftToAct <= 4 && globalData.playersLeftToAct > 1) {
         //steal opportunity
+        //print(playerName+" has a chance to steal on hand "+handNumber+" line: "+line);
         globalData.players[playerName].hands[globalData.players[playerName].hands.length-1].atsOpportunity = 1;
     }
     if (/\: (calls|raises) /.test(line)) {
@@ -571,6 +582,7 @@ function refreshWidget(subWidget, hboxNo, widgetNo, playerName) {
         } else {
             tooltip += value+"/"+totalHands+" most relevant hands";
         }
+        tooltip += globalData.players[playerName].leastRelevantHandUsedInStats;
         subWidget.set_tooltip_text(tooltip);
     } else if (statName == "vpip") {    //vpip
         var value = globalData.players[playerName].stats.vpip / globalData.players[playerName].stats.hands * 100;
@@ -837,6 +849,7 @@ function loadData() {
 
 function refreshPlayerData(playerName) {
     globalData.players[playerName].stats    =   new Stats(0,null);
+    globalData.players[playerName].leastRelevantHandUsedInStats =   "";
 
     //set relevanceScore score for hands
     for (var handIndex in globalData.players[playerName].hands) {
@@ -864,8 +877,22 @@ function refreshPlayerData(playerName) {
         for (var stat in globalData.players[playerName].hands[parseInt(handIndex)]) {
             globalData.players[playerName].stats[stat] += globalData.players[playerName].hands[parseInt(handIndex)][stat];
         }
-        if  (handIndex >= globalData.maxHands-1) { break; }
+        if  (handIndex >= globalData.maxHands-1) { 
+            //enough hands
+            break; 
+        }
     }
+
+    //info about the least relevant hand used to calculate the stats (shown in the tooltip of "hands" stat)
+    globalData.players[playerName].leastRelevantHandUsedInStats =   "\n\nLeast relevant hand used in stats was: ";
+    if (globalData.players[playerName].hands[parseInt(handIndex)].realMoney == 1) {
+        globalData.players[playerName].leastRelevantHandUsedInStats +=   "real money hand";
+    } else {
+        globalData.players[playerName].leastRelevantHandUsedInStats +=   "play money hand";
+    }
+    let handNumber          =   globalData.players[playerName].hands[parseInt(handIndex)].handNumber;
+    globalData.players[playerName].leastRelevantHandUsedInStats +=   " with "+globalData.playersByHand[handNumber].length+" players";
+    globalData.players[playerName].leastRelevantHandUsedInStats +=   ", "+globalData.players[playerName].hands[parseInt(handIndex)].time.toISOString();
 }
 
 function sortHandsByRelevance(a,b) {

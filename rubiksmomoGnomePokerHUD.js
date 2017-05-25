@@ -31,6 +31,7 @@ function Data() {
     this.processHandsUntilNo                    =   0;   //Wanna see stats at some specific point in past? Use 0 to process all.
     this.refreshIntervalMilliseconds            =   4000;
     this.maxHands                               =   500;    //If player has more than this many hands in history, the most relevant this many hands are used to calculate the stats. 
+    this.dateTimeFormat                         =   "%F %T"
     this.hero                                   =   "";
     this.latestHandNumber                       =   0;
     this.handNumberBeingProcessed               =   0;
@@ -360,7 +361,6 @@ function processPreflopAction(line, handNumber, playerName) {
     }
     if (globalData.atsOpportunity && globalData.playersLeftToAct <= 4 && globalData.playersLeftToAct > 1) {
         //steal opportunity
-        //print(playerName+" has a chance to steal on hand "+handNumber+" line: "+line);
         globalData.players[playerName].hands[globalData.players[playerName].hands.length-1].atsOpportunity = 1;
     }
     if (/\: (calls|raises) /.test(line)) {
@@ -849,7 +849,6 @@ function loadData() {
 
 function refreshPlayerData(playerName) {
     globalData.players[playerName].stats    =   new Stats(0,null);
-    globalData.players[playerName].leastRelevantHandUsedInStats =   "";
 
     //set relevanceScore score for hands
     for (var handIndex in globalData.players[playerName].hands) {
@@ -884,15 +883,16 @@ function refreshPlayerData(playerName) {
     }
 
     //info about the least relevant hand used to calculate the stats (shown in the tooltip of "hands" stat)
-    globalData.players[playerName].leastRelevantHandUsedInStats =   "\n\nLeast relevant hand used in stats was: ";
+    let leastRelevantHandUsedInStats =   "\n\nLeast relevant hand used in stats was:\n";
     if (globalData.players[playerName].hands[parseInt(handIndex)].realMoney == 1) {
-        globalData.players[playerName].leastRelevantHandUsedInStats +=   "real money hand";
+        leastRelevantHandUsedInStats +=   "real money hand";
     } else {
-        globalData.players[playerName].leastRelevantHandUsedInStats +=   "play money hand";
+        leastRelevantHandUsedInStats +=   "play money hand";
     }
     let handNumber          =   globalData.players[playerName].hands[parseInt(handIndex)].handNumber;
-    globalData.players[playerName].leastRelevantHandUsedInStats +=   " with "+globalData.playersByHand[handNumber].length+" players";
-    globalData.players[playerName].leastRelevantHandUsedInStats +=   ", "+globalData.players[playerName].hands[parseInt(handIndex)].time.toISOString();
+    leastRelevantHandUsedInStats +=   " with "+globalData.playersByHand[handNumber].length+" players";
+    leastRelevantHandUsedInStats +=   ", "+globalData.players[playerName].hands[parseInt(handIndex)].time.toLocaleFormat(globalData.dateTimeFormat).toString();
+    globalData.players[playerName].leastRelevantHandUsedInStats = leastRelevantHandUsedInStats;
 }
 
 function sortHandsByRelevance(a,b) {

@@ -20,13 +20,14 @@ var handHistoryPath             = GLib.get_home_dir()+"/PlayOnLinux's virtual dr
 //var handHistoryPath             = GLib.get_home_dir()+"/HandHistoryTest";
 
 function Data() {
-    this.windowLayout                           =   [   ["bb","hands","vpip","pfr"]
-                                                    ,   ["preflop3bet","ats","bbfvs","wtsd"]
-                                                    ,   ["title_notes_range_preflop_weak"   ,"notes_range_preflop_weak" ,"title_notes_range_preflop_strong" ,"notes_range_preflop_strong"   ]
-                                                    ,   ["title_notes_range_flop_weak"      ,"notes_range_flop_weak"    ,"title_notes_range_flop_strong"    ,"notes_range_flop_strong"      ]
-                                                    ,   ["title_notes_range_turn_weak"      ,"notes_range_turn_weak"    ,"title_notes_range_turn_strong"    ,"notes_range_turn_strong"      ]
-                                                    ,   ["title_notes_range_river_weak"     ,"notes_range_river_weak"   ,"title_notes_range_river_strong"   ,"notes_range_river_strong"     ]
-                                                    ];
+    this.windowLayout                           =   [   
+        ["bb","hands","vpip","pfr"]
+    ,   ["preflop3bet","ats","bbfvs","wtsd"]
+    ,   ["title_notes_range_preflop",   "notes_range_preflop"   ]
+    ,   ["title_notes_range_flop",      "notes_range_flop"      ]
+    ,   ["title_notes_range_turn",      "notes_range_turn"      ]
+    ,   ["title_notes_range_river",     "notes_range_river"     ]
+    ];
     this.heroWindowLayout                       =   [["bb","icmNash","hands","vpip","pfr"],["preflop3bet","ats","bbfvs","wtsd"]];
     this.processHandsUntilNo                    =   0;   //Wanna see stats at some specific point in past? Use 0 to process all.
     this.refreshIntervalMilliseconds            =   4000;
@@ -535,18 +536,14 @@ function getNotesWidget(widgetName) {
     if (/^notes_range_/.test(widgetName)) {
         widget.set_editable(true);
         widget.set_cursor_visible(true);
-        if (/^notes_range_.+_weak$/.test(widgetName)) {
-            widget.set_tooltip_text("Fill in here your estimate about the part of this player's range on "+widgetName.split("_")[2]+" that your current hand beats.");
-        } else {
-            widget.set_tooltip_text("Fill in here your estimate about the part of this player's range on "+widgetName.split("_")[2]+" that beats your current hand.");
-        }
+        widget.set_tooltip_text("Fill in here your estimate about this player's range on "+widgetName.split("_")[2]);
         widgetSetText(widget,"...");
         widget.get_style_context().add_class("notes");
     } else {
         widget.set_editable(false);
         widget.set_cursor_visible(false);
         if (/^title_notes_range_/.test(widgetName)) {
-            widgetSetText(widget," "+widgetName.replace("title_notes_range_","").replace("preflop_","PF").replace("flop_","F").replace("turn_","T").replace("river_","R").replace("weak","-").replace("strong","+")+": ");
+            widgetSetText(widget," "+widgetName.replace("title_notes_range_","").replace("preflop_","PF").replace("flop_","F").replace("turn_","T").replace("river_","R")+": ");
         }
     }
     return widget;
